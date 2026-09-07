@@ -1,0 +1,32 @@
+{
+  "name": "Secure Track",
+  "short_name": "SecureTrack",
+  "description": "Mobile-first PWA for Secure Track field technicians to log Teltonika FMC920/130 installations, scan barcodes, and track van inventory.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "New Installation",
+      "url": "/#new-installation",
+      "description": "Quickly log a new device installation"
+    }
+  ]
+}

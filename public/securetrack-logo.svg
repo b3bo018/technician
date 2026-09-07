@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 200" width="700" height="200" fill="none">
+  <defs>
+    <style>
+      .st-green { fill: #228b3f; }
+      .st-dark { fill: #1e293b; }
+      .st-white { fill: #f8fafc; }
+      .st-red { fill: #e11d48; }
+      .st-stroke-dark { stroke: #334155; stroke-width: 2.5; }
+      .st-stroke-radar { stroke: #475569; stroke-width: 2; stroke-dasharray: 4 6; }
+      .st-text-arabic { font-family: system-ui, -apple-system, sans-serif; font-weight: 700; font-size: 24px; fill: #64748b; }
+      .st-text-tagline { font-family: system-ui, -apple-system, sans-serif; font-weight: 800; font-size: 13.5px; letter-spacing: 4px; fill: #64748b; }
+      .st-wordmark { font-family: 'Arial Black', Impact, system-ui, sans-serif; font-weight: 900; font-size: 52px; letter-spacing: 1px; }
+    </style>
+  </defs>
+
+  <!-- Arabic Tagline Top -->
+  <text x="360" y="55" text-anchor="middle" class="st-text-arabic" direction="rtl">ســــيكور تـــــراك</text>
+  <line x1="80" y1="62" x2="620" y2="62" stroke="#334155" stroke-width="1.5" opacity="0.4" />
+
+  <!-- Main Wordmark: SECURE (Green), T (Dark/Light), R (Pin Red), OCK (Dark/Light) -->
+  <g transform="translate(60, 120)">
+    <!-- SECURE in bold green -->
+    <text x="0" y="0" class="st-wordmark st-green">SECURE</text>
+
+    <!-- T in dark/white -->
+    <text x="245" y="0" class="st-wordmark" fill="#f8fafc">T</text>
+
+    <!-- R stylized as Map Pin -->
+    <g transform="translate(283, -40)">
+      <!-- Outer pin head -->
+      <path d="M 18 0 C 8 0 0 8 0 18 C 0 31 18 46 18 46 C 18 46 36 31 36 18 C 36 8 28 0 18 0 Z" fill="#e11d48" />
+      <!-- Inner dot -->
+      <circle cx="18" cy="17" r="6" fill="#ffffff" />
+    </g>
+
+    <!-- OCK in dark/white -->
+    <text x="325" y="0" class="st-wordmark" fill="#f8fafc">OCK</text>
+
+    <!-- Stylized Chevron Cross & Radar symbol -->
+    <g transform="translate(480, -22)">
+      <!-- Radar ring arcs -->
+      <circle cx="45" cy="4" r="58" class="st-stroke-radar" />
+      <circle cx="45" cy="4" r="46" stroke="#228b3f" stroke-width="2" stroke-dasharray="8 8" opacity="0.8" />
+      <circle cx="45" cy="4" r="34" stroke="#64748b" stroke-width="1.5" stroke-dasharray="3 5" opacity="0.5" />
+
+      <!-- Chevron Left-Top (Slate) -->
+      <path d="M 30 -14 L 16 0 L 30 14 L 20 14 L 6 0 L 20 -14 Z" fill="#94a3b8" />
+      <!-- Chevron Left-Bottom (Green) -->
+      <path d="M 42 14 L 56 0 L 42 -14 L 52 -14 L 66 0 L 52 14 Z" fill="#228b3f" />
+    </g>
+  </g>
+
+  <!-- Tagline: PRECISION. PROTECTION. POSITIONING. -->
+  <text x="62" y="152" class="st-text-tagline">PRECISION. PROTECTION. POSITIONING.</text>
+</svg>

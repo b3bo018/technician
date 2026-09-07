@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Secure Track</title>
+    <meta name="description" content="Mobile-first Progressive Web App for Secure Track field technicians managing Teltonika FMC920 & FMC130 GPS devices, SIM cards, relays, offline synchronization, and fleet Admin Command Portal." />
+    <meta property="og:title" content="Secure Track" />
+    <meta property="og:description" content="Mobile-first Progressive Web App for Secure Track field technicians managing Teltonika FMC920 & FMC130 GPS devices, SIM cards, relays, offline synchronization, and fleet Admin Command Portal." />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#020617" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SecureTrack" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+  </head>
+  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-blue-600 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.log('ServiceWorker registration optional error:', err);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
+

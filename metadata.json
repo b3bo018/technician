@@ -1,0 +1,8 @@
+{
+  "name": "Secure Track",
+  "description": "Mobile-first Progressive Web App for Secure Track field technicians managing Teltonika FMC920 & FMC130 GPS devices, SIM cards, relays, offline synchronization, and fleet Admin Command Portal.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
