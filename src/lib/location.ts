@@ -11,10 +11,10 @@ export class LocationError extends Error {
 }
 
 function messageForError(error: GeolocationPositionError) {
-  if (error.code === error.PERMISSION_DENIED) {
-    return 'SecureTrack is blocked from using this phone’s location. Allow location for this site or PWA, then tap Try again.';
+  if (error.code === 1) {
+    return 'Location permission is blocked for SecureTrack. Allow location for this site or PWA, then tap Try again.';
   }
-  if (error.code === error.POSITION_UNAVAILABLE) {
+  if (error.code === 2) {
     return 'The phone could not determine its position. Turn on Location Services and Wi-Fi or mobile data, then try again near a window.';
   }
   return 'The phone is still waiting for a location. Keep SecureTrack open and tap Try again.';

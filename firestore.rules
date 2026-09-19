@@ -18,6 +18,8 @@ service cloud.firestore {
   function coordinates(d){return d.latitude is number&&d.latitude>=-90&&d.latitude<=90&&d.longitude is number&&d.longitude>=-180&&d.longitude<=180;}
   function optionalCoordinates(d){return !d.keys().hasAny(['latitude','longitude'])||(d.keys().hasAll(['latitude','longitude'])&&coordinates(d));}
   function assignedShift(id){return get(/databases/$(database)/documents/shifts/$(id)).data;}
+  function assignedJobType(id){return assignedShift(id).get('job_type','new_installation');}
+  function assignedUnitCount(id){return assignedShift(id).get('unit_count',1);}
 
   match /users/{uid} {
    allow read: if owner(uid)||staff();
@@ -42,18 +44,27 @@ service cloud.firestore {
    function validMovement(d){return d.keys().hasOnly(['technician_id','technician_name','type','device_model','quantity','sim_count','sim_provider','timestamp','captured_at','notes'])&&d.technician_name is string&&d.notes is string&&d.notes.size()<=1000&&integer(d.quantity)&&integer(d.sim_count)&&d.quantity+d.sim_count>0&&((d.quantity==0&&d.device_model=='')||(d.quantity>0&&model(d.device_model)))&&(!d.keys().hasAny(['sim_provider'])||simProvider(d.sim_provider))&&d.timestamp==request.time&&d.captured_at is timestamp;}
    allow get: if active()&&!exists(/databases/$(database)/documents/inventory_logs/$(id));
    allow read: if active()&&(resource.data.technician_id==request.auth.uid||staff());
-   allow create: if active()&&validMovement(request.resource.data)&&getAfter(/databases/$(database)/documents/inventory_accounts/$(request.resource.data.technician_id)).data.technician_id==request.resource.data.technician_id&&(
-    (stockAdmin()&&request.resource.data.type=='received')||
-    (request.resource.data.technician_id==request.auth.uid&&assignedShift(id).technician_id==request.auth.uid&&
-     ((assignedShift(id).job_type in ['new_installation','sim_device_change']&&request.resource.data.type=='installed'&&request.resource.data.quantity==assignedShift(id).unit_count&&request.resource.data.sim_count==assignedShift(id).unit_count)||
-      (assignedShift(id).job_type=='sim_change'&&request.resource.data.type=='sim-used'&&request.resource.data.quantity==0&&request.resource.data.sim_count==assignedShift(id).unit_count))));
+   allow create: if active()
+    &&validMovement(request.resource.data)
+    &&getAfter(/databases/$(database)/documents/inventory_accounts/$(request.resource.data.technician_id)).data.technician_id==request.resource.data.technician_id
+    &&(
+     (stockAdmin()&&request.resource.data.type=='received')
+     ||(
+      request.resource.data.technician_id==request.auth.uid
+      &&assignedShift(id).technician_id==request.auth.uid
+      &&(
+       (assignedJobType(id) in ['new_installation','sim_device_change']&&request.resource.data.type=='installed'&&request.resource.data.quantity==assignedUnitCount(id)&&request.resource.data.sim_count==assignedUnitCount(id))
+       ||(assignedJobType(id)=='sim_change'&&request.resource.data.type=='sim-used'&&request.resource.data.quantity==0&&request.resource.data.sim_count==assignedUnitCount(id))
+      )
+     )
+    );
    allow update: if false;
    allow delete: if master();
   }
   match /installations/{id} {
    allow read: if active()&&(resource.data.get('technician_id','')==request.auth.uid||resource.data.get('tech_id','')==request.auth.uid||staff());
    allow create: if active()&&request.resource.data.keys().hasOnly(['technician_id','technician_name','shift_id','job_type','unit_count','device_model','device_imeis','sim_numbers','sim_count','sim_provider','customer_ref','vehicle_ref','notes','timestamp','captured_at'])
-    &&request.resource.data.technician_id==request.auth.uid&&request.resource.data.shift_id==id&&assignedShift(id).technician_id==request.auth.uid&&request.resource.data.job_type==assignedShift(id).job_type&&request.resource.data.unit_count==assignedShift(id).unit_count
+    &&request.resource.data.technician_id==request.auth.uid&&request.resource.data.shift_id==id&&assignedShift(id).technician_id==request.auth.uid&&request.resource.data.job_type==assignedJobType(id)&&request.resource.data.unit_count==assignedUnitCount(id)
     &&job(request.resource.data.job_type)&&request.resource.data.unit_count is int&&request.resource.data.unit_count>=1&&request.resource.data.unit_count<=50&&request.resource.data.device_imeis is list&&request.resource.data.sim_numbers is list
     &&request.resource.data.device_imeis.size()<51&&request.resource.data.sim_numbers.size()<51&&request.resource.data.sim_count==request.resource.data.sim_numbers.size()&&(!request.resource.data.keys().hasAny(['sim_provider'])||simProvider(request.resource.data.sim_provider))&&request.resource.data.timestamp==request.time&&request.resource.data.captured_at is timestamp
     &&request.resource.data.customer_ref is string&&request.resource.data.customer_ref.size()>0&&request.resource.data.customer_ref.size()<=160&&request.resource.data.vehicle_ref is string&&request.resource.data.notes is string&&request.resource.data.notes.size()<=1000
