@@ -94,6 +94,12 @@ export async function updateShift(id:string,shift:Omit<Shift,'id'>){
  const data={...shift,latitude:shift.latitude??deleteField(),longitude:shift.longitude??deleteField(),scheduled_at:Timestamp.fromDate(new Date(shift.scheduled_at)),window_start:Timestamp.fromDate(new Date(shift.window_start)),window_end:Timestamp.fromDate(new Date(shift.window_end)),updated_at:serverTimestamp()};
  await updateDoc(doc(db,'shifts',id),data);
 }
+export async function deleteShift(id:string){
+ const batch=writeBatch(db);
+ batch.delete(doc(db,'attendance_logs',id));
+ batch.delete(doc(db,'shifts',id));
+ await batch.commit();
+}
 export async function checkIn(shift: Shift, coords: { latitude: number; longitude: number; accuracy_m: number }) {
   if (!navigator.onLine) throw new Error('Connect to the internet to confirm attendance. Attendance uses the server time.');
   const ref = doc(db, 'attendance_logs', shift.id);

@@ -21,9 +21,9 @@ export function LoginScreen() {
     </section>
     <section className="login-orbit"><div className="login-ring"><div className="login-card">
       <div className="login-icon"><LockKeyhole size={22}/></div><span className="eyebrow">SECURE ACCESS</span><h2>Welcome back</h2><p className="muted">Use your SecureTrack work account.</p>
-      <form onSubmit={submit}>
-        <label>Email address<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.com"/></label>
-        <label>Password<input type="password" required minLength={6} autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter your password"/></label>
+      <form onSubmit={submit} autoComplete="off">
+        <label>Email address<input name="securetrack-login-email" type="email" required autoComplete="off" autoCapitalize="none" spellCheck={false} data-lpignore="true" data-1p-ignore="true" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.com"/></label>
+        <label>Password<input name="securetrack-login-password" type="password" required minLength={6} autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter your password"/></label>
         {error&&<div className="notice error" role="alert">{error}</div>}
         <button className="primary" disabled={busy}>{busy?'Signing in…':'Sign in securely'}<ArrowRight size={18}/></button>
       </form><p className="fine-print">Accounts are issued by your master administrator.</p>

@@ -87,7 +87,7 @@ service cloud.firestore {
     &&exists(/databases/$(database)/documents/users/$(request.resource.data.technician_id))&&get(/databases/$(database)/documents/users/$(request.resource.data.technician_id)).data.role=='technician'
     &&request.resource.data.company_name is string&&request.resource.data.company_name.size()>0&&request.resource.data.contact_person is string&&request.resource.data.contact_person.size()>0&&request.resource.data.customer_phone is string&&request.resource.data.vehicle_number is string&&request.resource.data.vehicle_number.size()>0&&request.resource.data.maps_url is string&&request.resource.data.get('job_notes','') is string&&request.resource.data.get('job_notes','').size()<=1500
     &&job(request.resource.data.job_type)&&request.resource.data.unit_count is int&&request.resource.data.unit_count>=1&&request.resource.data.unit_count<=50&&optionalCoordinates(request.resource.data)&&request.resource.data.updated_at==request.time;
-   allow delete: if master();
+   allow delete: if assigner()&&!exists(/databases/$(database)/documents/installations/$(id));
   }
   match /login_logs/{id} {
    allow get: if active()&&!exists(/databases/$(database)/documents/login_logs/$(id));
@@ -101,7 +101,7 @@ service cloud.firestore {
    allow read: if active()&&(resource.data.technician_id==request.auth.uid||staff());
    allow create: if active()&&request.resource.data.keys().hasOnly(['technician_id','latitude','longitude','accuracy_m','timestamp'])&&request.resource.data.technician_id==request.auth.uid&&assignedShift(id).technician_id==request.auth.uid&&request.time>=assignedShift(id).window_start&&request.time<assignedShift(id).window_end&&coordinates(request.resource.data)&&request.resource.data.accuracy_m is number&&request.resource.data.accuracy_m>=0&&request.resource.data.timestamp==request.time;
    allow update: if false;
-   allow delete: if master();
+   allow delete: if master()||(assigner()&&!existsAfter(/databases/$(database)/documents/shifts/$(id))&&!exists(/databases/$(database)/documents/installations/$(id)));
   }
  }
 }
