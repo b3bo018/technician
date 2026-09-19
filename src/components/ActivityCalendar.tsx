@@ -1,0 +1,9 @@
+import { useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+export function ActivityCalendar({counts,onSelect}:{counts:Record<string,number>;onSelect:(date:string)=>void}){
+ const [month,setMonth]=useState(new Date().toISOString().slice(0,7));
+ const [year,monthNumber]=month.split('-').map(Number);const days=new Date(Date.UTC(year,monthNumber,0)).getUTCDate();const offset=(new Date(Date.UTC(year,monthNumber-1,1)).getUTCDay()+6)%7;
+ const move=(direction:number)=>{const next=new Date(Date.UTC(year,monthNumber-1+direction,1));setMonth(next.toISOString().slice(0,7))};
+ return <section className="panel activity-calendar"><div className="calendar-toolbar"><div><h2>Activity calendar</h2><p>Choose a date to filter the activity list.</p></div><div className="calendar-navigation"><button className="secondary" aria-label="Previous month" onClick={()=>move(-1)}><ChevronLeft/></button><strong>{new Date(Date.UTC(year,monthNumber-1,1)).toLocaleDateString('en-GB',{month:'long',year:'numeric',timeZone:'UTC'})}</strong><button className="secondary" aria-label="Next month" onClick={()=>move(1)}><ChevronRight/></button></div></div><div className="calendar-grid">{['MON','TUE','WED','THU','FRI','SAT','SUN'].map(day=><span className="calendar-day" key={day}>{day}</span>)}{Array.from({length:offset},(_,i)=><span key={'blank-'+i}/>) }{Array.from({length:days},(_,i)=>{const day=i+1;const date=`${year}-${String(monthNumber).padStart(2,'0')}-${String(day).padStart(2,'0')}`;const count=counts[date]||0;return <button type="button" className={'calendar-cell '+(count?'has-activity':'')} key={date} onClick={()=>onSelect(date)}><span>{String(day).padStart(2,'0')}/{String(monthNumber).padStart(2,'0')}/{String(year).slice(-2)}</span><strong>{count}</strong><small>{count===1?'activity':'activities'}</small></button>})}</div></section>
+}

@@ -1,0 +1,51 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { attendanceStatus, buildReport, csvCell, dayKey, displayTime, distanceMeters, jobPerformanceScore, localToISO, openingStock, overtimeMinutes, periodRange, stockAt, validateOperation, workDurationMinutes } from '../src/lib/domain';
+import { emptyStock } from '../src/types';
+const tech:any = { uid:'tech-a',email:'tech@example.test',displayName:'Aisha',role:'technician',inventory_breakdown:{fmc920:10,fmc130:4,sim_cards:20}};
+const account:any = {technician_id:'tech-a',opening:openingStock(tech),timestamp:'2026-09-01T00:00:00Z'};
+const base:any={technician_id:'tech-a',technician_name:'Aisha',timestamp:'2026-09-12T04:00:00Z',notes:''};
+const moves:any[]=[{...base,id:'receipt',type:'received',device_model:'FMC125',quantity:3,sim_count:5},{...base,id:'install',type:'installed',device_model:'FMC920',quantity:1,sim_count:1},{...base,id:'sim',type:'sim-used',device_model:'',quantity:0,sim_count:2}];
+const shift:any={id:'shift-1',technician_id:'tech-a',technician_name:'Aisha',site_name:'Site A',latitude:25.2,longitude:55.3,radius_m:150,grace_minutes:0,scheduled_at:'2026-09-12T04:00:00Z',date:'2026-09-12',timezone:'Asia/Dubai'};
+test('opening balance plus receipts minus devices and SIM usage',()=>{const stock=stockAt(account,moves)!;assert.equal(stock.FMC920,9);assert.equal(stock.FMC125,3);assert.equal(stock.SIM,22);assert.equal(stock.FMC130,4);});
+test('SIM networks have separate balances while legacy SIM stock is preserved',()=>{const stock=stockAt(account,[...moves,{...base,id:'du-in',type:'received',device_model:'',quantity:0,sim_count:12,sim_provider:'du'},{...base,id:'du-out',type:'sim-used',device_model:'',quantity:0,sim_count:2,sim_provider:'du'}])!;assert.equal(stock['SIM du'],10);assert.equal(stock['SIM Etisalat'],0);assert.equal(stock.SIM,22);});
+test('stock before baseline is unavailable; prior-day closing stock excludes later entries',()=>{assert.equal(stockAt(account,moves,'2026-08-31'),null);assert.deepEqual(stockAt(account,moves,'2026-09-11'),account.opening);});
+test('legacy profile totals preserve previous model split',()=>{assert.deepEqual(openingStock({uid:'x',email:'x',role:'technician',inventory_count:7}),{...emptyStock(),FMC920:3,FMC130:4});});
+test('Dubai 8am maps to 04:00 UTC and local date handles UTC rollover',()=>{assert.equal(localToISO('2026-09-12','08:00'),'2026-09-12T04:00:00.000Z');assert.equal(dayKey('2026-09-11T22:30:00Z'),'2026-09-12');});
+test('displayed time always uses 24-hour format',()=>{const shown=displayTime('2026-09-12T12:05:00Z');assert.match(shown,/16:05/);assert.doesNotMatch(shown,/AM|PM/i);});
+test('weekly range uses Monday; month includes leap day',()=>{assert.deepEqual(periodRange('2026-09-13','weekly'),['2026-09-07','2026-09-13']);assert.deepEqual(periodRange('2028-02-12','monthly'),['2028-02-01','2028-02-29']);});
+test('arrival cutoff, grace, missing status and site distance',()=>{
+ const a:any={id:shift.id,technician_id:'tech-a',latitude:25.2,longitude:55.3,accuracy_m:8,timestamp:'2026-09-12T04:00:00Z'};
+ assert.equal(attendanceStatus(shift,a).timing,'On time');
+ assert.equal(attendanceStatus(shift,{...a,timestamp:'2026-09-12T04:00:01Z'}).timing,'Late');
+ assert.equal(attendanceStatus({...shift,grace_minutes:5},{...a,timestamp:'2026-09-12T04:05:00Z'}).timing,'On time');
+ assert.equal(attendanceStatus(shift,{...a,latitude:25.21}).location,'Outside site');
+ assert.equal(attendanceStatus(shift,{...a,accuracy_m:200}).location,'Low GPS accuracy');
+ assert.equal(attendanceStatus(shift,undefined,Date.parse('2026-09-12T04:01:00Z')).timing,'Missing');
+ assert.equal(attendanceStatus(shift,undefined,Date.parse('2026-09-12T03:00:00Z')).timing,'Scheduled');
+ assert.ok(distanceMeters(25.2,55.3,25.21,55.3)>1000);
+});
+test('report includes models, closing stock, no-SIM installs and every assigned visit',()=>{
+ const i:any={...base,id:'install',device_model:'FMC920',sim_count:1,customer_ref:'Acme',vehicle_ref:'V1'};
+ const second:any={...i,id:'no-sim',device_model:'GT06',sim_count:0};
+ const other:any={...tech,uid:'other',displayName:'Other'};
+ const rows=buildReport([tech],[i,second,{...i,technician_id:other.uid}],moves,[account],[shift,{...shift,id:'shift-2',site_name:'Site B'}],[{id:'shift-1',technician_id:'tech-a',latitude:25.2,longitude:55.3,accuracy_m:8,timestamp:'2026-09-12T03:55:00Z'}],'2026-09-12','2026-09-12');
+ assert.equal(rows.length,1);assert.equal(rows[0].Installations,2);assert.equal(rows[0]['FMC920 installed'],1);assert.equal(rows[0]['GT06 installed'],1);assert.equal(rows[0]['SIMs used in installations'],1);assert.equal(rows[0]['SIMs used separately'],2);assert.equal(rows[0]['Unassigned legacy SIMs remaining'],22);assert.match(String(rows[0]['Check-in times / locations / accuracy']),/Site B: no check-in/);
+ assert.deepEqual(buildReport([],[],[],[],[],[],'2026-09-12','2026-09-12'),[]);
+ assert.throws(()=>buildReport([],[],[],[],[],[],'',''));
+ assert.throws(()=>buildReport([],[],[],[],[],[],'2026-09-12','2026-09-11'));
+});
+test('manual entry rejects fractions, missing models and invalid installations',()=>{
+ const valid={kind:'installed',device_model:'Ruptela',quantity:1,sim_count:0,customer_ref:'C'};
+ assert.doesNotThrow(()=>validateOperation(valid));
+ assert.throws(()=>validateOperation({...valid,quantity:1.5}));
+ assert.throws(()=>validateOperation({...valid,sim_count:2}));
+ assert.throws(()=>validateOperation({...valid,device_model:'Other'}));
+ assert.throws(()=>validateOperation({...valid,customer_ref:' '}));
+ assert.throws(()=>validateOperation({kind:'received',device_model:'',quantity:0,sim_count:10,customer_ref:''}));
+ assert.doesNotThrow(()=>validateOperation({kind:'received',device_model:'',quantity:0,sim_count:10,sim_provider:'Etisalat',customer_ref:''}));
+});
+test('overtime counts only work before 09:00 and after 18:00',()=>{const job:any={timestamp:localToISO('2026-09-12','20:00')};const arrival:any={timestamp:localToISO('2026-09-12','17:00')};assert.equal(overtimeMinutes({...shift,date:'2026-09-12',scheduled_at:localToISO('2026-09-12','17:00')},arrival,job),120);assert.equal(overtimeMinutes({...shift,date:'2026-09-12',scheduled_at:localToISO('2026-09-12','10:00')},undefined,{timestamp:localToISO('2026-09-12','17:00')} as any),0);});
+test('performance score uses recorded duration against the job benchmark',()=>{const arrival:any={timestamp:localToISO('2026-09-12','10:00')};const twoHours:any={timestamp:localToISO('2026-09-12','12:00')};const fourHours:any={timestamp:localToISO('2026-09-12','14:00')};const job={...shift,job_type:'new_installation',unit_count:1};assert.equal(workDurationMinutes(job,arrival,twoHours),120);assert.equal(jobPerformanceScore(job,arrival,twoHours),100);assert.equal(jobPerformanceScore(job,arrival,fourHours),50);});
+test('CSV quotes values, preserves numeric counts, and neutralizes formulas',()=>{assert.equal(csvCell('A,"B"'),'"A,""B"""');assert.equal(csvCell(12),'"12"');assert.equal(csvCell('=HYPERLINK("x")'),'"\'=HYPERLINK(""x"")"');});
+

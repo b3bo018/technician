@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.securetrack.technician",
+        "sha256_cert_fingerprints": ["7F:90:D9:D9:69:7A:46:E4:9D:86:24:77:A9:1A:D8:D1:85:4F:D5:09:28:20:C8:06:0C:FA:7F:17:F0:1F:6D:75"]
+      }
+    }]

@@ -1,35 +1,11 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import {
-  getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager
-} from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { connectAuthEmulator, getAuth } from 'firebase/auth';
+import { connectFirestoreEmulator, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const emulated = import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS === 'true';
+if (emulated && !['localhost','127.0.0.1'].includes(location.hostname)) throw new Error('Emulator mode is restricted to localhost.');
+const app = initializeApp(emulated ? { projectId: 'demo-securetrack', apiKey: 'demo-key', authDomain: 'localhost' } : firebaseConfig);
 export const auth = getAuth(app);
-
-let firestoreInstance;
-try {
-  firestoreInstance = firebaseConfig.firestoreDatabaseId
-    ? initializeFirestore(
-        app,
-        {
-          localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-        },
-        firebaseConfig.firestoreDatabaseId
-      )
-    : initializeFirestore(app, {
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-      });
-} catch {
-  firestoreInstance = firebaseConfig.firestoreDatabaseId
-    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-    : getFirestore(app);
-}
-
-export const db = firestoreInstance;
-export { firebaseConfig };
+export const db = initializeFirestore(app, { localCache: persistentLocalCache({tabManager:persistentMultipleTabManager()}) }, emulated ? '(default)' : firebaseConfig.firestoreDatabaseId);
+if (emulated) { connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true}); connectFirestoreEmulator(db,'127.0.0.1',8080); }
 

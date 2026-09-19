@@ -1,71 +1,22 @@
-export type UserRole = 'technician' | 'admin';
-
-export interface VanInventory {
-  fmc920: number;
-  fmc130: number;
-  sim_cards: number;
-  relays: number;
-}
-
-export const DEFAULT_INVENTORY: VanInventory = {
-  fmc920: 15,
-  fmc130: 15,
-  sim_cards: 30,
-  relays: 20
-};
-
-export interface TechnicianUser {
-  uid: string;
-  email: string;
-  role: UserRole;
-  inventory_count: number; // total devices (fmc920 + fmc130)
-  inventory_breakdown?: VanInventory;
-  displayName?: string;
-  created_at?: string;
-  status?: 'active' | 'deactivated';
-  phone?: string;
-}
-
-export interface Installation {
-  id?: string;
-  tech_id: string;
-  tech_email: string;
-  customer_name: string;
-  device_type: string; // 'Teltonika FMC920' | 'Teltonika FMC130' | string
-  imei: string;
-  sim_number: string; // SIM card / ICCID number
-  relay_installed?: boolean; // 12V/24V immobilizer relay
-  timestamp: string; // ISO string or Firestore Timestamp representation
-  notes?: string;
-  syncedFromOfflineQueue?: boolean;
-  offlineQueuedAt?: string;
-}
-
-export interface CustomerOption {
-  id: string;
-  name: string;
-  category: string;
-  contactPerson?: string;
-  phone?: string;
-}
-
-export const TELTONIKA_DEVICES = [
-  'Teltonika FMC920',
-  'Teltonika FMC130'
-] as const;
-
-export const DEFAULT_CUSTOMERS: CustomerOption[] = [
-  { id: 'cust-1', name: 'Apex Fleet Logistics', category: 'Fleet Transport', phone: '+971 50 123 4567' },
-  { id: 'cust-2', name: 'Metro Courier Services', category: 'Last-Mile Delivery', phone: '+971 52 234 5678' },
-  { id: 'cust-3', name: 'Velocity Heavy Haul', category: 'Freight & Cargo', phone: '+971 55 345 6789' },
-  { id: 'cust-4', name: 'BlueWave Utilities & Power', category: 'Field Service', phone: '+971 56 456 7890' },
-  { id: 'cust-5', name: 'Global Cold Chain Express', category: 'Refrigerated Transport', phone: '+971 54 567 8901' },
-  { id: 'cust-6', name: 'Titan Heavy Machinery Inc.', category: 'Construction & Plant', phone: '+971 58 678 9012' },
-  { id: 'cust-7', name: 'Urban Green Transit', category: 'Passenger Transit', phone: '+971 50 789 0123' }
-];
-
-export const COMMON_DEVICE_MODELS: string[] = [
-  'Teltonika FMC920',
-  'Teltonika FMC130'
-];
-
+export const DEVICE_MODELS = ['FMC920', 'FMC130', 'FMC125', 'Jimi VL03', 'GT06', 'Ruptela'] as const;
+export type DeviceModel = typeof DEVICE_MODELS[number];
+export const SIM_PROVIDERS = ['Etisalat', 'du', 'International'] as const;
+export type SimProvider = typeof SIM_PROVIDERS[number];
+export type SimStockKey = 'SIM' | `SIM ${SimProvider}`;
+export const SIM_STOCK_KEYS: SimStockKey[] = ['SIM Etisalat', 'SIM du', 'SIM International', 'SIM'];
+export const simStockKey = (provider?: SimProvider): SimStockKey => provider ? `SIM ${provider}` : 'SIM';
+export const ROLES = ['master_admin', 'admin', 'manager', 'accountant', 'hr', 'it', 'technician'] as const;
+export type Role = typeof ROLES[number];
+export const JOB_TYPES = ['new_installation', 'sim_change', 'sim_device_change', 'device_removal'] as const;
+export type JobType = typeof JOB_TYPES[number];
+export type Stock = Record<DeviceModel | SimStockKey, number>;
+export const emptyStock = (): Stock => ({ FMC920: 0, FMC130: 0, FMC125: 0, 'Jimi VL03': 0, GT06: 0, Ruptela: 0, 'SIM Etisalat': 0, 'SIM du': 0, 'SIM International': 0, SIM: 0 });
+export interface Technician { uid: string; email: string; displayName?: string; photoDataUrl?: string; role: Role; status?: 'active' | 'deactivated'; inventory_breakdown?: { fmc920?: number; fmc130?: number; sim_cards?: number }; inventory_count?: number; }
+export interface Movement { id: string; technician_id: string; technician_name: string; type: 'received' | 'installed' | 'sim-used'; device_model: DeviceModel | ''; quantity: number; sim_count: number; sim_provider?: SimProvider; timestamp: string; notes: string; }
+export interface Installation { id: string; shift_id?: string; technician_id: string; technician_name: string; job_type?: JobType; unit_count?: number; device_model: string; device_imeis?: string[]; sim_numbers?: string[]; sim_count: number; sim_provider?: SimProvider; customer_ref: string; vehicle_ref: string; notes: string; timestamp: string; legacy?: boolean; }
+export interface InventoryAccount { technician_id: string; opening: Stock; timestamp: string; }
+export interface Shift { id: string; technician_id: string; technician_name: string; site_name: string; company_name?: string; contact_person?: string; customer_name?: string; customer_phone?: string; vehicle_number?: string; maps_url?: string; job_notes?: string; job_type: JobType; unit_count: number; latitude?: number; longitude?: number; radius_m: number; scheduled_at: string; window_start: string; window_end: string; grace_minutes: number; timezone: string; date: string; }
+export interface Attendance { id: string; technician_id: string; latitude: number; longitude: number; accuracy_m: number; timestamp: string; }
+export interface PendingOperation { id: string; uid: string; kind: 'received' | 'installed' | 'sim-used' | 'job-completed'; shift_id?: string; job_type?: JobType; device_model: DeviceModel | ''; device_imeis?: string[]; sim_numbers?: string[]; quantity: number; sim_count: number; sim_provider?: SimProvider; customer_ref: string; vehicle_ref: string; notes: string; captured_at: string; }
+export const roleLabel = (role: Role) => ({ master_admin: 'Master administrator', admin: 'Administrator', manager: 'Manager', accountant: 'Accountant', hr: 'Human resources', it: 'IT support', technician: 'Technician' }[role]);
+export const jobLabel = (job: JobType) => ({ new_installation: 'New installation', sim_change: 'SIM change', sim_device_change: 'SIM and device change', device_removal: 'Device removal' }[job]);

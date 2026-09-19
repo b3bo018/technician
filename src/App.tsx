@@ -1,754 +1,98 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  User, 
-  onAuthStateChanged, 
-  signOut 
-} from 'firebase/auth';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  updateDoc, 
-  increment, 
-  addDoc 
-} from 'firebase/firestore';
-import { 
-  ClipboardList, 
-  FileSpreadsheet, 
-  CheckCircle2, 
-  Zap, 
-  Loader2 
-} from 'lucide-react';
-import { auth, db } from './lib/firebase';
-import { 
-  Installation, 
-  TechnicianUser, 
-  VanInventory, 
-  DEFAULT_INVENTORY,
-  CustomerOption,
-  DEFAULT_CUSTOMERS 
-} from './types';
-import { 
-  enqueueInstallation, 
-  getQueuedInstallations, 
-  syncQueuedInstallations 
-} from './lib/offlineQueue';
-
-// Components
-import { Navbar } from './components/Navbar';
+import { LoginLocation } from './components/LoginLocation';
+import { useCallback, useEffect, useState } from 'react';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { BarChart3, BriefcaseBusiness, CalendarCheck, CalendarPlus, ClipboardList, Gauge, LayoutDashboard, LogOut, MapPin, Package, PackagePlus, RefreshCw, Users, Wifi, WifiOff, Wrench } from 'lucide-react';
+import { auth } from './lib/firebase';
+import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, PendingOperation, Shift, Technician, roleLabel, jobLabel } from './types';
+import { ensureInventory, ensureProfile, legacyQueueCount, mapAccount, mapAttendance, mapInstallation, mapMovement, mapShift, observe, observeProfile, pending, queueOperation, syncOperations } from './lib/data';
+import { TIME_ZONE, attendanceStatus, dayKey, displayTime, simTotal, stockAt } from './lib/domain';
 import { LoginScreen } from './components/LoginScreen';
-import { StatusBar } from './components/StatusBar';
-import { InstallationForm } from './components/InstallationForm';
-import { InstallationHistory } from './components/InstallationHistory';
-import { ImeiScannerModal } from './components/ImeiScannerModal';
-import { InventoryModal } from './components/InventoryModal';
-import { AdminDashboard } from './components/AdminDashboard';
+import { StockGrid } from './components/StockGrid';
+import { AttendancePanel } from './components/AttendancePanel';
+import { AdminDashboard, type AdminSection } from './components/AdminDashboard';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
-
+type Tab = 'overview' | 'inventory' | 'installations' | 'attendance' | 'admin';
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [localUserSession, setLocalUserSession] = useState<{
-    uid: string;
-    email: string;
-    role: 'admin' | 'technician';
-    inventory_count: number;
-    inventory_breakdown?: VanInventory;
-  } | null>(() => {
-    try {
-      const saved = localStorage.getItem('securetrack_local_session');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  const [authLoading, setAuthLoading] = useState<boolean>(true);
-  const [userProfile, setUserProfile] = useState<TechnicianUser | null>(null);
-  const [installations, setInstallations] = useState<Installation[]>([]);
-  const [installationsLoading, setInstallationsLoading] = useState<boolean>(true);
-
-  // Customers state (shared across app & ready for imported customer lists)
-  const [customers, setCustomers] = useState<CustomerOption[]>(() => {
-    try {
-      const saved = localStorage.getItem('securetrack_customers_cache');
-      return saved ? JSON.parse(saved) : DEFAULT_CUSTOMERS;
-    } catch {
-      return DEFAULT_CUSTOMERS;
-    }
-  });
-
-  // Scanner Modal & Target state (IMEI or SIM)
-  const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
-  const [scannerTarget, setScannerTarget] = useState<'imei' | 'sim'>('imei');
-  const [scannedImei, setScannedImei] = useState<string>('');
-  const [scannedSim, setScannedSim] = useState<string>('');
-
-  // Inventory Modal
-  const [isInventoryModalOpen, setIsInventoryModalOpen] = useState<boolean>(false);
-
-  // Connectivity state for PWA offline detection
-  const [isOnline, setIsOnline] = useState<boolean>(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
-
-  // Offline queue state
-  const [pendingQueueCount, setPendingQueueCount] = useState<number>(0);
-  const [isSyncingOffline, setIsSyncingOffline] = useState<boolean>(false);
-  const [syncNotice, setSyncNotice] = useState<string | null>(null);
-
-  // Admin View state
-  const [isAdminViewOpen, setIsAdminViewOpen] = useState<boolean>(false);
-
-  // PWA beforeinstallprompt handler
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-
-  // Active view tab for mobile ergonomics
-  const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
-
-  // Load offline queue counter
-  const refreshQueueCount = useCallback(async () => {
-    try {
-      const queued = await getQueuedInstallations();
-      const activePending = queued.filter((i) => i.status === 'queued' || i.status === 'failed');
-      setPendingQueueCount(activePending.length);
-    } catch (e) {
-      console.warn('Error reading offline queue:', e);
-    }
-  }, []);
-
-  // Trigger offline data synchronization to Firestore
-  const handleTriggerSync = useCallback(async () => {
-    if (!navigator.onLine || isSyncingOffline) return;
-    setIsSyncingOffline(true);
-    try {
-      const result = await syncQueuedInstallations();
-      if (result.syncedCount > 0 || result.duplicatesSkipped > 0) {
-        setSyncNotice(
-          `Sync Complete: ${result.syncedCount} queued installation(s) saved to cloud${
-            result.duplicatesSkipped > 0 ? ` (${result.duplicatesSkipped} duplicate prevented)` : ''
-          }.`
-        );
-        setTimeout(() => setSyncNotice(null), 5000);
-      }
-      await refreshQueueCount();
-    } catch (err: unknown) {
-      console.warn('Auto-sync notice:', err);
-    } finally {
-      setIsSyncingOffline(false);
-    }
-  }, [isSyncingOffline, refreshQueueCount]);
-
-  // Online / Offline listeners & PWA Install Prompt Listener
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      handleTriggerSync();
-    };
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    // Initial check of offline queue
-    refreshQueueCount();
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, [handleTriggerSync, refreshQueueCount]);
-
-  // Listen for Firebase Auth state
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      setAuthLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Effective user ID & email (supports Firebase auth or fallback local session)
-  const activeUid = currentUser?.uid || localUserSession?.uid;
-  const activeEmail = currentUser?.email || localUserSession?.email || 'itsecuretrack@gmail.com';
-
-  // Sync Technician Profile from 'users' collection in real-time
-  useEffect(() => {
-    if (!activeUid) {
-      setUserProfile(null);
-      return;
-    }
-
-    const userDocRef = doc(db, 'users', activeUid);
-
-    const unsubscribe = onSnapshot(
-      userDocRef,
-      async (docSnap) => {
-        const isAdminEmail = activeEmail.toLowerCase() === 'itsecuretrack@gmail.com' ||
-                             activeEmail.toLowerCase() === 'admin@securetrack.com' ||
-                             localUserSession?.role === 'admin';
-
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          const fmc920 = data.inventory_breakdown?.fmc920 ?? 15;
-          const fmc130 = data.inventory_breakdown?.fmc130 ?? 15;
-          const simCards = data.inventory_breakdown?.sim_cards ?? 30;
-          const relays = data.inventory_breakdown?.relays ?? 20;
-
-          setUserProfile({
-            uid: activeUid,
-            email: data.email || activeEmail,
-            role: data.role || (isAdminEmail ? 'admin' : 'technician'),
-            inventory_count: fmc920 + fmc130,
-            inventory_breakdown: {
-              fmc920,
-              fmc130,
-              sim_cards: simCards,
-              relays
-            },
-            displayName: data.displayName,
-            created_at: data.created_at
-          });
-        } else {
-          // Initialize user profile in Firestore
-          const initialData: TechnicianUser = {
-            uid: activeUid,
-            email: activeEmail,
-            role: isAdminEmail ? 'admin' : 'technician',
-            inventory_count: 30,
-            inventory_breakdown: DEFAULT_INVENTORY,
-            created_at: new Date().toISOString()
-          };
-          try {
-            await setDoc(userDocRef, initialData);
-            setUserProfile(initialData);
-          } catch (e) {
-            console.warn('Unable to initialize user document (local mode fallback active):', e);
-            setUserProfile(initialData);
-          }
-        }
-      },
-      (error) => {
-        console.warn('User profile snapshot warning (offline mode enabled):', error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [activeUid, activeEmail, localUserSession?.role]);
-
-  // Sync installations for current technician
-  useEffect(() => {
-    if (!activeUid) {
-      setInstallations([]);
-      setInstallationsLoading(false);
-      return;
-    }
-
-    const installationsQuery = query(
-      collection(db, 'installations'),
-      where('tech_id', '==', activeUid)
-    );
-
-    const unsubscribe = onSnapshot(
-      installationsQuery,
-      async (snapshot) => {
-        const records: Installation[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          records.push({
-            id: docSnap.id,
-            tech_id: data.tech_id,
-            tech_email: data.tech_email,
-            customer_name: data.customer_name,
-            device_type: data.device_type,
-            imei: data.imei,
-            sim_number: data.sim_number || '',
-            relay_installed: Boolean(data.relay_installed),
-            timestamp: data.timestamp,
-            notes: data.notes
-          });
-        });
-
-        // Incorporate any un-synced offline queued items
-        try {
-          const queued = await getQueuedInstallations();
-          const techQueued = queued.filter(
-            (q) => q.tech_id === activeUid && (q.status === 'queued' || q.status === 'failed')
-          );
-          for (const q of techQueued) {
-            if (!records.some((r) => r.imei === q.imei)) {
-              records.push({
-                id: q.localId,
-                tech_id: q.tech_id,
-                tech_email: q.tech_email,
-                customer_name: q.customer_name,
-                device_type: q.device_type,
-                imei: q.imei,
-                sim_number: q.sim_number || '',
-                relay_installed: Boolean(q.relay_installed),
-                timestamp: q.timestamp,
-                notes: q.notes ? `${q.notes} (Pending Offline Sync)` : '(Pending Offline Sync)'
-              });
-            }
-          }
-        } catch (e) {
-          console.warn('Error reading offline queue for history:', e);
-        }
-
-        // Sort descending by timestamp
-        records.sort((a, b) => {
-          const dateA = new Date(a.timestamp).getTime() || 0;
-          const dateB = new Date(b.timestamp).getTime() || 0;
-          return dateB - dateA;
-        });
-
-        setInstallations(records);
-        setInstallationsLoading(false);
-      },
-      (error) => {
-        console.warn('Installations query snapshot warning (offline mode enabled):', error);
-        setInstallationsLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [activeUid]);
-
-  // Is current user an admin?
-  const isUserAdmin = useMemo(() => {
-    return (
-      userProfile?.role === 'admin' ||
-      activeEmail.toLowerCase() === 'itsecuretrack@gmail.com' ||
-      activeEmail.toLowerCase() === 'admin@securetrack.com' ||
-      localUserSession?.role === 'admin'
-    );
-  }, [userProfile, activeEmail, localUserSession]);
-
-  // Calculate Real-Time Metrics
-  const dailyTotal = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    return installations.filter((item) => {
-      try {
-        const itemDateStr = new Date(item.timestamp).toISOString().slice(0, 10);
-        return itemDateStr === todayStr;
-      } catch {
-        return false;
-      }
-    }).length;
-  }, [installations]);
-
-  const inventoryBreakdown: VanInventory = userProfile?.inventory_breakdown ||
-    localUserSession?.inventory_breakdown ||
-    DEFAULT_INVENTORY;
-
-  const inventoryRemaining = (inventoryBreakdown.fmc920 || 0) + (inventoryBreakdown.fmc130 || 0);
-
-  // Handle Installation Submission with Robust Teltonika & SIM Tracking
-  const handleRecordInstallation = async (formData: {
-    customer_name: string;
-    device_type: string;
-    imei: string;
-    sim_number: string;
-    relay_installed?: boolean;
-    notes?: string;
-  }) => {
-    if (!activeUid) throw new Error('You must be signed in to log installations.');
-
-    const timestamp = new Date().toISOString();
-    const isFmc130 = formData.device_type.toLowerCase().includes('130');
-
-    // Optimistic local stock update function
-    const applyOptimisticStock = () => {
-      setUserProfile((prev) => {
-        if (!prev) return null;
-        const oldBd = prev.inventory_breakdown || DEFAULT_INVENTORY;
-        const newBd: VanInventory = {
-          fmc920: isFmc130 ? oldBd.fmc920 : Math.max(0, oldBd.fmc920 - 1),
-          fmc130: isFmc130 ? Math.max(0, oldBd.fmc130 - 1) : oldBd.fmc130,
-          sim_cards: Math.max(0, oldBd.sim_cards - 1),
-          relays: formData.relay_installed ? Math.max(0, oldBd.relays - 1) : oldBd.relays
-        };
-        return {
-          ...prev,
-          inventory_count: newBd.fmc920 + newBd.fmc130,
-          inventory_breakdown: newBd
-        };
-      });
-    };
-
-    // 1. If currently offline, queue into localForage directly
-    if (!navigator.onLine) {
-      const { item, isDuplicate } = await enqueueInstallation({
-        tech_id: activeUid,
-        tech_email: activeEmail,
-        customer_name: formData.customer_name,
-        device_type: formData.device_type,
-        imei: formData.imei,
-        sim_number: formData.sim_number,
-        relay_installed: formData.relay_installed,
-        timestamp: timestamp,
-        notes: formData.notes || ''
-      });
-
-      if (isDuplicate) {
-        throw new Error(`Device with IMEI ${formData.imei} is already pending in your offline sync queue.`);
-      }
-
-      applyOptimisticStock();
-
-      setInstallations((prev) => [
-        {
-          id: item.localId,
-          tech_id: activeUid,
-          tech_email: activeEmail,
-          customer_name: formData.customer_name,
-          device_type: formData.device_type,
-          imei: formData.imei,
-          sim_number: formData.sim_number,
-          relay_installed: formData.relay_installed,
-          timestamp: timestamp,
-          notes: formData.notes ? `${formData.notes} (Offline)` : '(Offline Queue)'
-        },
-        ...prev
-      ]);
-
-      await refreshQueueCount();
-      return;
-    }
-
-    // 2. When online, attempt immediate Firestore commit with offline queue fallback
-    try {
-      await addDoc(collection(db, 'installations'), {
-        tech_id: activeUid,
-        tech_email: activeEmail,
-        customer_name: formData.customer_name,
-        device_type: formData.device_type,
-        imei: formData.imei,
-        sim_number: formData.sim_number,
-        relay_installed: Boolean(formData.relay_installed),
-        timestamp: timestamp,
-        notes: formData.notes || ''
-      });
-
-      // Decrement technician hardware, SIM, and relay
-      const userDocRef = doc(db, 'users', activeUid);
-      const updatePayload: Record<string, any> = {
-        inventory_count: increment(-1),
-        'inventory_breakdown.sim_cards': increment(-1)
-      };
-      if (isFmc130) {
-        updatePayload['inventory_breakdown.fmc130'] = increment(-1);
-      } else {
-        updatePayload['inventory_breakdown.fmc920'] = increment(-1);
-      }
-      if (formData.relay_installed) {
-        updatePayload['inventory_breakdown.relays'] = increment(-1);
-      }
-
-      await updateDoc(userDocRef, updatePayload);
-      applyOptimisticStock();
-    } catch (networkOrWriteErr) {
-      console.warn('Direct Firestore write failed, saving to localForage offline queue:', networkOrWriteErr);
-
-      await enqueueInstallation({
-        tech_id: activeUid,
-        tech_email: activeEmail,
-        customer_name: formData.customer_name,
-        device_type: formData.device_type,
-        imei: formData.imei,
-        sim_number: formData.sim_number,
-        relay_installed: formData.relay_installed,
-        timestamp: timestamp,
-        notes: formData.notes || ''
-      });
-
-      applyOptimisticStock();
-      await refreshQueueCount();
-    }
-  };
-
-  // Handle Multi-Item Stock Restock / Update
-  const handleUpdateInventory = async (newBreakdown: VanInventory) => {
-    if (!activeUid) return;
-
-    const totalDevs = (newBreakdown.fmc920 || 0) + (newBreakdown.fmc130 || 0);
-
-    setUserProfile((prev) =>
-      prev
-        ? {
-            ...prev,
-            inventory_count: totalDevs,
-            inventory_breakdown: newBreakdown
-          }
-        : null
-    );
-
-    try {
-      const userDocRef = doc(db, 'users', activeUid);
-      await updateDoc(userDocRef, {
-        inventory_count: totalDevs,
-        inventory_breakdown: newBreakdown
-      });
-    } catch (e) {
-      console.warn('Inventory count update saved locally (offline):', e);
-    }
-  };
-
-  // Customer Management Helpers
-  const handleAddNewCustomer = (newCust: CustomerOption) => {
-    setCustomers((prev) => {
-      const updated = [newCust, ...prev];
-      localStorage.setItem('securetrack_customers_cache', JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-  const handleUpdateCustomers = (newList: CustomerOption[]) => {
-    setCustomers(newList);
-    localStorage.setItem('securetrack_customers_cache', JSON.stringify(newList));
-  };
-
-  // Trigger PWA Installation
-  const handleInstallPwa = async () => {
-    if (!deferredPrompt) return;
-    try {
-      await deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      if (choice.outcome === 'accepted') {
-        setDeferredPrompt(null);
-      }
-    } catch {
-      // Prompt dismissed
-    }
-  };
-
-  // Logout
-  const handleLogout = async () => {
-    try {
-      localStorage.removeItem('securetrack_local_session');
-      setLocalUserSession(null);
-      await signOut(auth);
-    } catch (e) {
-      console.error('Sign out error:', e);
-    }
-  };
-
-  // Handle instant local session login (for quick testing / offline fallback)
-  const handleLocalSessionLogin = (email: string, role: 'admin' | 'technician') => {
-    const session = {
-      uid: role === 'admin' ? 'admin_itsecuretrack' : 'tech_field_01',
-      email: email,
-      role: role,
-      inventory_count: 30,
-      inventory_breakdown: DEFAULT_INVENTORY
-    };
-    localStorage.setItem('securetrack_local_session', JSON.stringify(session));
-    setLocalUserSession(session);
-    if (role === 'admin') {
-      setIsAdminViewOpen(true);
-    }
-  };
-
-  // Loading Screen
-  if (authLoading && !localUserSession) {
-    return (
-      <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-slate-950 text-slate-200">
-        <Loader2 className="w-9 h-9 animate-spin text-emerald-500 mb-3" />
-        <p className="text-sm font-medium tracking-wide">Initializing SECURE TRACK Terminal...</p>
-      </div>
-    );
-  }
-
-  // If Not Authenticated, show Login Screen
-  if (!currentUser && !localUserSession) {
-    return <LoginScreen onLocalSessionLogin={handleLocalSessionLogin} />;
-  }
-
-  return (
-    <div className="min-h-[100dvh] w-full bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
-      {/* Top Navbar with SECURE TRACK Branding, Offline Sync Status & Admin Switcher */}
-      <Navbar
-        techEmail={activeEmail}
-        role={isUserAdmin ? 'admin' : 'technician'}
-        isOnline={isOnline}
-        onLogout={handleLogout}
-        canInstallPwa={Boolean(deferredPrompt)}
-        onInstallPwa={handleInstallPwa}
-        pendingOfflineCount={pendingQueueCount}
-        isSyncingOffline={isSyncingOffline}
-        onTriggerSync={handleTriggerSync}
-        isAdminViewOpen={isAdminViewOpen}
-        onToggleAdminView={() => setIsAdminViewOpen(!isAdminViewOpen)}
-      />
-
-      {/* Admin Dashboard View (Accessible to Admin role) */}
-      {isAdminViewOpen && isUserAdmin ? (
-        <AdminDashboard
-          adminEmail={activeEmail}
-          onExitAdminView={() => setIsAdminViewOpen(false)}
-          customers={customers}
-          onUpdateCustomers={handleUpdateCustomers}
-        />
-      ) : (
-        /* Field Technician Mobile-First Main View */
-        <main className="flex-1 w-full max-w-lg mx-auto px-3.5 sm:px-4 py-4 space-y-4">
-          {/* Offline Sync Success Banner */}
-          {syncNotice && (
-            <div className="flex items-center space-x-2.5 rounded-2xl bg-emerald-950/80 border border-emerald-500/50 p-3 text-xs text-emerald-200 animate-fadeIn shadow-lg">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span className="flex-1 font-medium">{syncNotice}</span>
-            </div>
-          )}
-
-          {/* Offline Queue Notice Banner when items are pending */}
-          {!isOnline && pendingQueueCount > 0 && (
-            <div className="flex items-center justify-between rounded-2xl bg-amber-950/70 border border-amber-600/40 p-3 text-xs text-amber-200">
-              <div className="flex items-center space-x-2">
-                <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>
-                  <strong>Offline Mode Active:</strong> {pendingQueueCount} installation(s) saved locally via localForage.
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* PWA Install Banner */}
-          <PwaInstallPrompt
-            canInstallPrompt={Boolean(deferredPrompt)}
-            onInstall={handleInstallPwa}
-          />
-
-          {/* Real-time Status Bar (Daily Total & Multi-Item Van Hardware) */}
-          <StatusBar
-            dailyTotal={dailyTotal}
-            inventoryRemaining={inventoryRemaining}
-            inventoryBreakdown={inventoryBreakdown}
-            allTimeTotal={installations.length}
-            onOpenRestock={() => setIsInventoryModalOpen(true)}
-          />
-
-          {/* Mobile Navigation Segmented Control */}
-          <div className="flex rounded-xl bg-slate-900 p-1 border border-slate-800 shadow-inner">
-            <button
-              id="tab-new-install"
-              type="button"
-              onClick={() => setActiveTab('form')}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-1.5 transition-all ${
-                activeTab === 'form'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              <span>Log Install</span>
-            </button>
-            <button
-              id="tab-history-reports"
-              type="button"
-              onClick={() => setActiveTab('history')}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-1.5 transition-all ${
-                activeTab === 'history'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>History ({installations.length})</span>
-            </button>
-          </div>
-
-          {/* Tab 1: Installation Form */}
-          {activeTab === 'form' && (
-            <div className="space-y-4 animate-fadeIn">
-              <InstallationForm
-                techUid={activeUid}
-                techEmail={activeEmail}
-                inventoryRemaining={inventoryRemaining}
-                inventoryBreakdown={inventoryBreakdown}
-                customers={customers}
-                onAddNewCustomer={handleAddNewCustomer}
-                onSubmitInstallation={handleRecordInstallation}
-                onOpenScanner={() => {
-                  setScannerTarget('imei');
-                  setIsScannerOpen(true);
-                }}
-                onOpenSimScanner={() => {
-                  setScannerTarget('sim');
-                  setIsScannerOpen(true);
-                }}
-                scannedImei={scannedImei}
-                scannedSim={scannedSim}
-                onClearScannedImei={() => setScannedImei('')}
-                onClearScannedSim={() => setScannedSim('')}
-                onOpenRestock={() => setIsInventoryModalOpen(true)}
-              />
-            </div>
-          )}
-
-          {/* Tab 2: Installation History & Excel Reporting */}
-          {activeTab === 'history' && (
-            <div className="space-y-4 animate-fadeIn">
-              <InstallationHistory
-                installations={installations}
-                techEmail={activeEmail}
-                isLoading={installationsLoading}
-                onUpdateSimNumber={(id, newSim) => {
-                  setInstallations((prev) =>
-                    prev.map((inst) => (inst.id === id ? { ...inst, sim_number: newSim } : inst))
-                  );
-                }}
-              />
-            </div>
-          )}
-        </main>
-      )}
-
-      {/* Barcode Camera Scanner Modal (Supports both Teltonika IMEI & SIM Barcodes) */}
-      <ImeiScannerModal
-        isOpen={isScannerOpen}
-        title={scannerTarget === 'sim' ? 'Scan SIM Barcode / ICCID' : 'Scan Teltonika IMEI'}
-        subtitle={
-          scannerTarget === 'sim'
-            ? 'Align SIM card barcode or ICCID in frame'
-            : 'Align 15-digit Teltonika barcode in frame'
-        }
-        onClose={() => setIsScannerOpen(false)}
-        onScanSuccess={(detectedVal) => {
-          if (scannerTarget === 'sim') {
-            setScannedSim(detectedVal);
-          } else {
-            setScannedImei(detectedVal);
-          }
-          setActiveTab('form');
-        }}
-      />
-
-      {/* Multi-Item Van Stock Restock / Inventory Adjustment Modal */}
-      <InventoryModal
-        isOpen={isInventoryModalOpen}
-        onClose={() => setIsInventoryModalOpen(false)}
-        currentBreakdown={inventoryBreakdown}
-        onUpdateInventory={handleUpdateInventory}
-      />
-    </div>
-  );
+ const [user,setUser] = useState<User|null>(null); const [ready,setReady] = useState(false); const [profile,setProfile] = useState<Technician|null>(null);
+ const [tab,setTab] = useState<Tab>('overview'); const [online,setOnline] = useState(navigator.onLine); const [now,setNow] = useState(Date.now());
+ const [installations,setInstallations] = useState<Installation[]>([]); const [legacy,setLegacy] = useState<Installation[]>([]); const [movements,setMovements] = useState<Movement[]>([]); const [accounts,setAccounts] = useState<InventoryAccount[]>([]); const [shifts,setShifts] = useState<Shift[]>([]); const [attendance,setAttendance] = useState<Attendance[]>([]); const [technicians,setTechnicians] = useState<Technician[]>([]);
+ const [loginLogs,setLoginLogs]=useState<Attendance[]>([]);
+ const [queue,setQueue] = useState<PendingOperation[]>([]); const [syncing,setSyncing] = useState(false); const [error,setError] = useState(''); const [oldPending,setOldPending] = useState(0); const [prompt,setPrompt] = useState<any>(null);
+ const [locationSession,setLocationSession]=useState('');
+ const [adminSection,setAdminSection]=useState<AdminSection>('jobs');
+ const isStaff = !!profile && profile.role !== 'technician';
+ const adminNav=profile?[...(!['accountant','hr'].includes(profile.role)?[{id:'jobs' as AdminSection,label:'Assigned jobs',icon:BriefcaseBusiness}]:[]),...(['master_admin','admin'].includes(profile.role)?[{id:'assign' as AdminSection,label:'Add job',icon:CalendarPlus}]:[]),...(['master_admin','admin','hr'].includes(profile.role)?[{id:'performance' as AdminSection,label:'Performance',icon:Gauge}]:[]),...(profile.role!=='hr'?[{id:'inventory' as AdminSection,label:'Inventory',icon:PackagePlus}]:[]),...(['master_admin','admin','accountant'].includes(profile.role)?[{id:'stock' as AdminSection,label:'Issue stock',icon:PackagePlus},{id:'reports' as AdminSection,label:'Reports & OT',icon:BarChart3}]:[]),...(profile.role==='master_admin'?[{id:'people' as AdminSection,label:'People & roles',icon:Users}]:[])]:[];
+ useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setProfile(null);setReady(true);setError('');}),[]);
+ useEffect(()=>{if(profile?.role==='accountant')setAdminSection('inventory');else if(profile?.role==='hr')setAdminSection('performance');else if(profile)setAdminSection('jobs')},[profile?.role]);
+ useEffect(()=>{const update=()=>setOnline(navigator.onLine);const timer=setInterval(()=>setNow(Date.now()),30000);const install=(e:Event)=>{e.preventDefault();setPrompt(e);};window.addEventListener('online',update);window.addEventListener('offline',update);window.addEventListener('beforeinstallprompt',install);return()=>{clearInterval(timer);window.removeEventListener('online',update);window.removeEventListener('offline',update);window.removeEventListener('beforeinstallprompt',install);};},[]);
+ useEffect(()=>{
+  setInstallations([]);setLegacy([]);setMovements([]);setAccounts([]);setShifts([]);setAttendance([]);setLoginLogs([]);setTechnicians([]);setQueue([]);setTab('overview');
+  if(!user)return;
+  let active=true;
+  ensureProfile(user).catch(e=>{if(active)setError('Account setup: '+e.message);});
+  const unsub=observeProfile(user.uid,p=>{if(active)setProfile(p);},e=>setError(e.message));
+  legacyQueueCount().then(n=>{if(active)setOldPending(n);});
+  return()=>{active=false;unsub();};
+ },[user?.uid]);
+ const refresh = useCallback(async()=>{if(user)setQueue(await pending(user.uid));},[user?.uid]);
+ const sync = useCallback(async()=>{
+  if(!profile||!navigator.onLine)return;
+  setSyncing(true);
+  try{await syncOperations(profile);setError('');}catch(e:any){setError('Sync needs attention: '+e.message);}finally{setSyncing(false);await refresh();}
+ },[profile,refresh]);
+ useEffect(()=>{refresh();if(profile&&online)sync();},[profile?.uid,online]);
+ useEffect(()=>{
+  if(!profile||profile.status==='deactivated')return;
+  const uid=isStaff?null:profile.uid;
+  const fail=(e:Error)=>setError('Data access: '+e.message);
+  const subs=[
+   observe('installations',uid,mapInstallation,setInstallations,fail),
+   ...(isStaff?[]:[observe('installations',uid,mapInstallation,setLegacy,fail,'tech_id')]),
+   observe('inventory_logs',uid,mapMovement,setMovements,fail),
+   observe('inventory_accounts',uid,mapAccount,setAccounts,fail),
+   observe('shifts',uid,mapShift,setShifts,fail),
+   observe('attendance_logs',uid,mapAttendance,setAttendance,fail),
+   observe('login_logs',uid,mapAttendance,setLoginLogs,fail),
+   ...(isStaff?[observe<Technician>('users',null,(id,d)=>({...d,uid:id}),setTechnicians,fail)]:[])
+  ];
+  if(online&&profile.role==='technician')ensureInventory(profile).catch(fail);
+  return()=>subs.forEach(u=>u());
+ },[profile?.uid,isStaff,profile?.status]);
+ async function save(op:Omit<PendingOperation,'uid'|'captured_at'>) {
+  if(!profile)throw new Error('Please sign in.');
+  const operation={...op,uid:profile.uid,captured_at:new Date().toISOString()};
+  await queueOperation(operation);await refresh();if(online)void sync();
+ }
+ const allInstallations=Array.from(new Map([...installations,...legacy].map(i=>[i.id,i])).values()).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
+ const ownInstallations=allInstallations.filter(i=>i.technician_id===user?.uid);
+ const ownMoves=movements.filter(m=>m.technician_id===user?.uid).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
+ const stock=stockAt(accounts.find(a=>a.technician_id===user?.uid),ownMoves);
+ const ownShifts=shifts.filter(s=>s.technician_id===user?.uid).sort((a,b)=>a.scheduled_at.localeCompare(b.scheduled_at));
+ const today=dayKey(new Date(now)); const todayShifts=ownShifts.filter(s=>s.date===today);
+ const completed=todayShifts.filter(s=>attendance.some(a=>a.id===s.id)).length;
+ if(!ready)return <div className="loading">Opening your workspace…</div>;
+ if(!user)return <LoginScreen/>;
+ if(!profile)return <div className="loading"><h2>Loading your account</h2><p>{error||'Connecting to SecureTrack…'}</p><button className="secondary" onClick={()=>window.location.reload()}>Retry</button><button className="text-button" onClick={()=>signOut(auth)}>Sign out</button></div>;
+ if(profile.status==='deactivated')return <div className="loading"><h2>Account deactivated</h2><p>Contact your administrator.</p><button className="secondary" onClick={()=>signOut(auth)}>Sign out</button></div>;
+ const sessionKey=user.uid+':'+user.metadata.lastSignInTime;
+
+ const nav=[{id:'overview',label:'Today',icon:LayoutDashboard},{id:'attendance',label:'My jobs',icon:MapPin},{id:'inventory',label:'Inventory',icon:Package},{id:'installations',label:'Completed',icon:Wrench}];
+ return <div className="app-shell"><aside className="sidebar"><a className="brand-logo" href="#" onClick={e=>{e.preventDefault();setTab(isStaff?'admin':'overview');}}><img src="/securetrack-logo.png" alt="SecureTrack"/></a><div className="workspace-label">OPERATIONS <span>LIVE</span></div><nav>{isStaff?adminNav.map(n=><button key={n.id} className={adminSection===n.id?'active':''} onClick={()=>{setTab('admin');setAdminSection(n.id)}}><n.icon size={19}/>{n.label}{adminSection===n.id&&<span className="nav-dot"/>}</button>):nav.map(n=><button key={n.id} className={tab===n.id?'active':''} onClick={()=>setTab(n.id as Tab)}><n.icon size={19}/>{n.label}{tab===n.id&&<span className="nav-dot"/>}</button>)}</nav><div className="sidebar-bottom"><div className="user-block"><div className="avatar">{profile.photoDataUrl?<img src={profile.photoDataUrl} alt=""/>:(profile.displayName||profile.email).slice(0,2).toUpperCase()}</div><div><strong>{profile.displayName||profile.email.split('@')[0]}</strong><small>{roleLabel(profile.role)}</small></div><button aria-label="Sign out" onClick={()=>signOut(auth)}><LogOut size={18}/></button></div></div></aside>
+ <div className="main-shell"><header className="topbar"><span>SecureTrack <span className="slash">/</span> <strong>{isStaff?adminNav.find(n=>n.id===adminSection)?.label||'Operations':nav.find(n=>n.id===tab)?.label||nav[0].label}</strong></span><div className="top-actions"><button className="text-button" onClick={()=>signOut(auth)} aria-label="Sign out of account"><LogOut size={16}/></button><span className={'connection '+(online?'':'offline')}>{online?<Wifi size={14}/>:<WifiOff size={14}/>}<span>{online?'Live':'Offline'}</span></span><span className="date-label">{new Date(now).toLocaleDateString('en-GB',{timeZone:TIME_ZONE,day:'numeric',month:'short',year:'numeric'})}</span></div></header>
+ <main className="workspace">{!isStaff&&<div className="mobile-nav">{nav.map(n=><button key={n.id} onClick={()=>setTab(n.id as Tab)} className={tab===n.id?'active':''}><n.icon size={17}/><span>{n.label}</span></button>)}</div>}
+ {!isStaff && locationSession!==sessionKey && <LoginLocation key={sessionKey} user={user} onComplete={()=>setLocationSession(sessionKey)}/>}
+ {error&&<div className="notice error" role="alert">{error}<button onClick={sync} disabled={syncing}>Retry sync</button></div>}
+ {oldPending>0&&<div className="notice warning">This browser has {oldPending} unsynced entries from the previous app. They remain preserved. Ask an administrator to reconcile them before using the new stock balances.</div>}
+ {queue.length>0&&<div className="notice warning"><RefreshCw size={16}/>{queue.length} entries awaiting cloud confirmation. Stock below shows confirmed entries only.<button disabled={!online||syncing} onClick={sync}>{syncing?'Syncing…':'Sync now'}</button></div>}
+ <PwaInstallPrompt canInstallPrompt={!!prompt} onInstall={async()=>{await prompt?.prompt();setPrompt(null);}}/>
+ {isStaff?<AdminDashboard section={adminSection} onSectionChange={setAdminSection} loginLogs={loginLogs} currentUid={user.uid} currentRole={profile.role} technicians={technicians} installations={allInstallations} movements={movements} accounts={accounts} shifts={shifts} attendance={attendance} now={now}/>:<>
+ <div className="page-heading"><div><span className="eyebrow">{tab==='overview'?'TODAY AT A GLANCE':'MY FIELD WORKSPACE'}</span><h1>{tab==='overview'?'Good to see you':tab==='inventory'?'Stock on hand':tab==='installations'?'Completed jobs':'My assignments'}<span className="accent">.</span></h1><p>{tab==='overview'?(profile.displayName||profile.email.split('@')[0])+', here is today’s field plan.':tab==='inventory'?'Issued stock updates automatically as jobs are completed.':tab==='installations'?'A permanent record of completed field work.':'Customer details, directions, arrival and completion in one place.'}</p></div></div>
+ {tab==='overview'&&<><div className="metrics"><div className="metric"><div><span>JOBS TODAY</span><Wrench size={19}/></div><strong>{todayShifts.length}</strong><small>{todayShifts.filter(s=>ownInstallations.some(i=>i.shift_id===s.id||i.id===s.id)).length} completed</small></div><div className="metric"><div><span>DEVICES ON HAND</span><Package size={19}/></div><strong>{stock?DEVICE_MODELS.reduce((n,key)=>n+stock[key],0):'—'}</strong><small>{simTotal(stock)??'—'} SIM cards available</small></div><div className="metric"><div><span>SITE ARRIVALS</span><CalendarCheck size={19}/></div><strong>{completed}<em> / {todayShifts.length}</em></strong><small>Confirmed with GPS</small></div></div><AttendancePanel shifts={todayShifts} attendance={attendance} installations={ownInstallations} save={save} now={now}/><section className="panel"><div className="section-label"><h2>Stock at a glance</h2><button className="text-button" onClick={()=>setTab('inventory')}>View full inventory ↗</button></div><StockGrid stock={stock}/></section></>}
+ {tab==='inventory'&&<div className="stack"><section className="panel"><div className="section-label"><h2>Stock on hand</h2><span>Confirmed balance</span></div><StockGrid stock={stock}/>{stock&&Object.values(stock).some(n=>n<0)&&<div className="notice warning">A stock balance is negative. Check missing receipts or incorrect entries with your administrator.</div>}</section><section className="panel"><div className="section-title"><ClipboardList size={20}/><div><h2>Stock history</h2><p>Newest entries first</p></div></div><div className="table-wrap"><table><thead><tr><th>Date</th><th>Movement</th><th>Device</th><th>Quantity</th><th>SIMs</th><th>Network</th><th>Notes</th></tr></thead><tbody>{ownMoves.slice(0,100).map(m=><tr key={m.id}><td>{displayTime(m.timestamp)}</td><td><span className={'badge '+(m.type==='received'?'good':'')}>{m.type}</span></td><td>{m.device_model||'SIM only'}</td><td>{m.type==='received'?'+':'−'}{m.quantity}</td><td>{m.type==='received'?'+':'−'}{m.sim_count}</td><td>{m.sim_provider||'Legacy / unassigned'}</td><td>{m.notes||'—'}</td></tr>)}</tbody></table>{!ownMoves.length&&<div className="empty">No stock movements yet.</div>}</div>{ownMoves.length>100&&<p className="fine-print">Showing the most recent 100 entries. Admin reports include the full history.</p>}</section></div>}
+ {tab==='installations'&&<section className="panel"><div className="section-title"><ClipboardList size={20}/><div><h2>Completed jobs</h2><p>Device and SIM identifiers are stored with each assignment.</p></div></div><div className="table-wrap"><table><thead><tr><th>Completed</th><th>Company</th><th>Job</th><th>Units</th><th>Device</th><th>SIM network</th><th>Identifiers</th></tr></thead><tbody>{ownInstallations.slice(0,100).map(i=><tr key={i.id}><td>{displayTime(i.timestamp)}</td><td>{i.customer_ref}</td><td>{jobLabel(i.job_type||'new_installation')}</td><td>{i.unit_count||1}</td><td>{i.device_model||'—'}</td><td>{i.sim_count?i.sim_provider||'Legacy / unassigned':'—'}</td><td>{[...(i.device_imeis||[]),...(i.sim_numbers||[])].join(' · ')||'Legacy record'}</td></tr>)}</tbody></table>{!ownInstallations.length&&<div className="empty">Completed assignments will appear here.</div>}</div></section>}
+ {tab==='attendance'&&<AttendancePanel shifts={ownShifts} attendance={attendance} installations={ownInstallations} save={save} now={now}/>}
+ </>}
+ <footer className="workspace-footer"><span>SECURETRACK · FIELD OPERATIONS</span><span>Reporting timezone: {TIME_ZONE}</span></footer>
+ </main></div></div>;
 }
 

@@ -6,4 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
-
+.firebase/
+.chrome-headless/
+*.keystore
+signing-key-info.txt
+deliverables/

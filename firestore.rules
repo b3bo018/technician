@@ -1,38 +1,96 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{database}/documents {
-    
-    function isAuthenticated() {
-      return request.auth != null;
-    }
+ match /databases/{database}/documents {
+  function signedIn(){return request.auth!=null;}
+  function owner(uid){return signedIn()&&request.auth.uid==uid;}
+  function profile(){return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;}
+  function active(){return signedIn()&&profile().get('status','active')!='deactivated';}
+  function role(r){return active()&&profile().role==r;}
+  function staff(){return active()&&profile().role in ['master_admin','admin','manager','accountant','hr','it'];}
+  function master(){return role('master_admin');}
+  function stockAdmin(){return active()&&profile().role in ['master_admin','admin','accountant'];}
+  function assigner(){return active()&&profile().role in ['master_admin','admin'];}
+  function model(v){return v in ['FMC920','FMC130','FMC125','Jimi VL03','GT06','Ruptela'];}
+  function job(v){return v in ['new_installation','sim_change','sim_device_change','device_removal'];}
+  function simProvider(v){return v in ['Etisalat','du','International'];}
+  function validPhoto(d){return d.get('photoDataUrl','') is string&&d.get('photoDataUrl','').size()<=200000;}
+  function integer(v){return v is int&&v>=0&&v<=10000;}
+  function coordinates(d){return d.latitude is number&&d.latitude>=-90&&d.latitude<=90&&d.longitude is number&&d.longitude>=-180&&d.longitude<=180;}
+  function optionalCoordinates(d){return !d.keys().hasAny(['latitude','longitude'])||(d.keys().hasAll(['latitude','longitude'])&&coordinates(d));}
+  function assignedShift(id){return get(/databases/$(database)/documents/shifts/$(id)).data;}
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.email == 'itsecuretrack@gmail.com' ||
-        request.auth.token.email == 'admin@securetrack.com' ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-      );
-    }
-
-    // User profiles & technician records
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isOwner(userId) || isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    // Installations records
-    match /installations/{installationId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && (request.resource.data.tech_id == request.auth.uid || isAdmin());
-      allow update, delete: if isAuthenticated() && (resource.data.tech_id == request.auth.uid || isAdmin());
-    }
+  match /users/{uid} {
+   allow read: if owner(uid)||staff();
+   allow create: if master()&&request.resource.data.keys().hasOnly(['uid','email','displayName','photoDataUrl','role','status','inventory_count','inventory_breakdown','created_at'])
+    &&request.resource.data.uid==uid&&request.resource.data.email is string&&request.resource.data.displayName is string&&request.resource.data.displayName.size()>0&&request.resource.data.displayName.size()<=160
+    &&request.resource.data.role in ['admin','manager','accountant','hr','it','technician']&&request.resource.data.status=='active'&&request.resource.data.inventory_count==0&&validPhoto(request.resource.data)
+    &&request.resource.data.inventory_breakdown=={'fmc920':0,'fmc130':0,'sim_cards':0}&&request.resource.data.created_at==request.time;
+   allow update: if (master()&&uid!=request.auth.uid&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','status','photoDataUrl'])
+    &&request.resource.data.role in ['admin','manager','accountant','hr','it','technician']&&request.resource.data.get('status','active') in ['active','deactivated']&&validPhoto(request.resource.data))
+    ||(owner(uid)&&active()&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','photoDataUrl'])&&request.resource.data.displayName is string&&request.resource.data.displayName.size()<=160&&validPhoto(request.resource.data));
+   allow delete: if master()&&uid!=request.auth.uid;
   }
+  match /inventory_accounts/{uid} {
+   function legacyBalance(){let p=get(/databases/$(database)/documents/users/$(uid)).data;let b=p.get('inventory_breakdown',{});let total=p.get('inventory_count',0);return{'FMC920':b.get('fmc920',math.floor(total / 2)),'FMC130':b.get('fmc130',math.ceil(total / 2)),'FMC125':0,'Jimi VL03':0,'GT06':0,'Ruptela':0,'SIM Etisalat':0,'SIM du':0,'SIM International':0,'SIM':b.get('sim_cards',0)};}
+   function oldLegacyBalance(){let p=get(/databases/$(database)/documents/users/$(uid)).data;let b=p.get('inventory_breakdown',{});let total=p.get('inventory_count',0);return{'FMC920':b.get('fmc920',math.floor(total / 2)),'FMC130':b.get('fmc130',math.ceil(total / 2)),'FMC125':0,'Jimi VL03':0,'GT06':0,'Ruptela':0,'SIM':b.get('sim_cards',0)};}
+   allow read: if active()&&(owner(uid)||resource.data.technician_id==request.auth.uid||staff());
+   allow create: if (owner(uid)||stockAdmin())&&active()&&request.resource.data.keys().hasOnly(['technician_id','opening','timestamp'])&&request.resource.data.technician_id==uid&&request.resource.data.timestamp==request.time&&(request.resource.data.opening==legacyBalance()||request.resource.data.opening==oldLegacyBalance());
+   allow update: if false;
+   allow delete: if master();
+  }
+  match /inventory_logs/{id} {
+   function validMovement(d){return d.keys().hasOnly(['technician_id','technician_name','type','device_model','quantity','sim_count','sim_provider','timestamp','captured_at','notes'])&&d.technician_name is string&&d.notes is string&&d.notes.size()<=1000&&integer(d.quantity)&&integer(d.sim_count)&&d.quantity+d.sim_count>0&&((d.quantity==0&&d.device_model=='')||(d.quantity>0&&model(d.device_model)))&&(!d.keys().hasAny(['sim_provider'])||simProvider(d.sim_provider))&&d.timestamp==request.time&&d.captured_at is timestamp;}
+   allow get: if active()&&!exists(/databases/$(database)/documents/inventory_logs/$(id));
+   allow read: if active()&&(resource.data.technician_id==request.auth.uid||staff());
+   allow create: if active()&&validMovement(request.resource.data)&&getAfter(/databases/$(database)/documents/inventory_accounts/$(request.resource.data.technician_id)).data.technician_id==request.resource.data.technician_id&&(
+    (stockAdmin()&&request.resource.data.type=='received')||
+    (request.resource.data.technician_id==request.auth.uid&&assignedShift(id).technician_id==request.auth.uid&&
+     ((assignedShift(id).job_type in ['new_installation','sim_device_change']&&request.resource.data.type=='installed'&&request.resource.data.quantity==assignedShift(id).unit_count&&request.resource.data.sim_count==assignedShift(id).unit_count)||
+      (assignedShift(id).job_type=='sim_change'&&request.resource.data.type=='sim-used'&&request.resource.data.quantity==0&&request.resource.data.sim_count==assignedShift(id).unit_count))));
+   allow update: if false;
+   allow delete: if master();
+  }
+  match /installations/{id} {
+   allow read: if active()&&(resource.data.get('technician_id','')==request.auth.uid||resource.data.get('tech_id','')==request.auth.uid||staff());
+   allow create: if active()&&request.resource.data.keys().hasOnly(['technician_id','technician_name','shift_id','job_type','unit_count','device_model','device_imeis','sim_numbers','sim_count','sim_provider','customer_ref','vehicle_ref','notes','timestamp','captured_at'])
+    &&request.resource.data.technician_id==request.auth.uid&&request.resource.data.shift_id==id&&assignedShift(id).technician_id==request.auth.uid&&request.resource.data.job_type==assignedShift(id).job_type&&request.resource.data.unit_count==assignedShift(id).unit_count
+    &&job(request.resource.data.job_type)&&request.resource.data.unit_count is int&&request.resource.data.unit_count>=1&&request.resource.data.unit_count<=50&&request.resource.data.device_imeis is list&&request.resource.data.sim_numbers is list
+    &&request.resource.data.device_imeis.size()<51&&request.resource.data.sim_numbers.size()<51&&request.resource.data.sim_count==request.resource.data.sim_numbers.size()&&(!request.resource.data.keys().hasAny(['sim_provider'])||simProvider(request.resource.data.sim_provider))&&request.resource.data.timestamp==request.time&&request.resource.data.captured_at is timestamp
+    &&request.resource.data.customer_ref is string&&request.resource.data.customer_ref.size()>0&&request.resource.data.customer_ref.size()<=160&&request.resource.data.vehicle_ref is string&&request.resource.data.notes is string&&request.resource.data.notes.size()<=1000
+    &&((request.resource.data.job_type in ['new_installation','sim_device_change']&&model(request.resource.data.device_model)&&request.resource.data.device_imeis.size()==request.resource.data.unit_count&&request.resource.data.sim_numbers.size()==request.resource.data.unit_count&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='installed')
+     ||(request.resource.data.job_type=='sim_change'&&request.resource.data.device_model==''&&request.resource.data.device_imeis.size()==0&&request.resource.data.sim_numbers.size()==request.resource.data.unit_count&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='sim-used')
+     ||(request.resource.data.job_type=='device_removal'&&model(request.resource.data.device_model)&&request.resource.data.device_imeis.size()==request.resource.data.unit_count&&request.resource.data.sim_numbers.size()==0&&!existsAfter(/databases/$(database)/documents/inventory_logs/$(id))));
+   allow update: if false;
+   allow delete: if master();
+  }
+  match /shifts/{id} {
+   allow read: if active()&&(resource.data.technician_id==request.auth.uid||staff());
+   allow create: if assigner()&&request.resource.data.keys().hasOnly(['technician_id','technician_name','site_name','company_name','customer_name','contact_person','customer_phone','vehicle_number','maps_url','job_notes','job_type','unit_count','latitude','longitude','radius_m','scheduled_at','window_start','window_end','grace_minutes','timezone','date','created_at'])
+    &&exists(/databases/$(database)/documents/users/$(request.resource.data.technician_id))&&get(/databases/$(database)/documents/users/$(request.resource.data.technician_id)).data.role=='technician'
+    &&request.resource.data.company_name is string&&request.resource.data.company_name.size()>0&&request.resource.data.company_name.size()<=160&&request.resource.data.contact_person is string&&request.resource.data.contact_person.size()>0&&request.resource.data.contact_person.size()<=160
+    &&request.resource.data.customer_phone is string&&request.resource.data.customer_phone.size()<=32&&request.resource.data.vehicle_number is string&&request.resource.data.vehicle_number.size()>0&&request.resource.data.vehicle_number.size()<=32&&request.resource.data.maps_url is string&&request.resource.data.maps_url.size()<=2048&&request.resource.data.get('job_notes','') is string&&request.resource.data.get('job_notes','').size()<=1500&&job(request.resource.data.job_type)&&request.resource.data.unit_count is int&&request.resource.data.unit_count>=1&&request.resource.data.unit_count<=50
+    &&optionalCoordinates(request.resource.data)&&request.resource.data.radius_m is int&&request.resource.data.radius_m>=25&&request.resource.data.radius_m<=10000&&request.resource.data.grace_minutes is int&&request.resource.data.grace_minutes>=0&&request.resource.data.grace_minutes<=120
+    &&request.resource.data.site_name is string&&request.resource.data.site_name.size()>0&&request.resource.data.site_name.size()<=160&&request.resource.data.technician_name is string&&request.resource.data.timezone is string&&request.resource.data.date is string
+    &&request.resource.data.scheduled_at is timestamp&&request.resource.data.window_start is timestamp&&request.resource.data.window_end is timestamp&&request.resource.data.window_start<=request.resource.data.scheduled_at&&request.resource.data.scheduled_at<request.resource.data.window_end&&request.resource.data.window_end-request.resource.data.window_start<=duration.value(25,'h')&&request.resource.data.created_at==request.time;
+   allow update: if assigner()&&!exists(/databases/$(database)/documents/installations/$(id))&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['technician_id','technician_name','site_name','company_name','customer_name','contact_person','customer_phone','vehicle_number','maps_url','job_notes','job_type','unit_count','latitude','longitude','radius_m','scheduled_at','window_start','window_end','grace_minutes','timezone','date','updated_at'])
+    &&exists(/databases/$(database)/documents/users/$(request.resource.data.technician_id))&&get(/databases/$(database)/documents/users/$(request.resource.data.technician_id)).data.role=='technician'
+    &&request.resource.data.company_name is string&&request.resource.data.company_name.size()>0&&request.resource.data.contact_person is string&&request.resource.data.contact_person.size()>0&&request.resource.data.customer_phone is string&&request.resource.data.vehicle_number is string&&request.resource.data.vehicle_number.size()>0&&request.resource.data.maps_url is string&&request.resource.data.get('job_notes','') is string&&request.resource.data.get('job_notes','').size()<=1500
+    &&job(request.resource.data.job_type)&&request.resource.data.unit_count is int&&request.resource.data.unit_count>=1&&request.resource.data.unit_count<=50&&optionalCoordinates(request.resource.data)&&request.resource.data.updated_at==request.time;
+   allow delete: if master();
+  }
+  match /login_logs/{id} {
+   allow get: if active()&&!exists(/databases/$(database)/documents/login_logs/$(id));
+   allow read: if active()&&(resource.data.technician_id==request.auth.uid||staff());
+   allow create: if active()&&request.resource.data.keys().hasOnly(['technician_id','latitude','longitude','accuracy_m','timestamp'])&&request.resource.data.technician_id==request.auth.uid&&coordinates(request.resource.data)&&request.resource.data.accuracy_m is number&&request.resource.data.accuracy_m>=0&&request.resource.data.timestamp==request.time;
+   allow update: if false;
+   allow delete: if master();
+  }
+  match /attendance_logs/{id} {
+   allow get: if active()&&!exists(/databases/$(database)/documents/attendance_logs/$(id));
+   allow read: if active()&&(resource.data.technician_id==request.auth.uid||staff());
+   allow create: if active()&&request.resource.data.keys().hasOnly(['technician_id','latitude','longitude','accuracy_m','timestamp'])&&request.resource.data.technician_id==request.auth.uid&&assignedShift(id).technician_id==request.auth.uid&&request.time>=assignedShift(id).window_start&&request.time<assignedShift(id).window_end&&coordinates(request.resource.data)&&request.resource.data.accuracy_m is number&&request.resource.data.accuracy_m>=0&&request.resource.data.timestamp==request.time;
+   allow update: if false;
+   allow delete: if master();
+  }
+ }
 }
-

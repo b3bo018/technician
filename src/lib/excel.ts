@@ -1,0 +1,86 @@
+import ExcelJS from 'exceljs';
+import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, Shift, SIM_PROVIDERS, Technician, jobLabel, simStockKey } from '../types';
+import { dayKey, displayTime, overtimeMinutes, simTotal, stockAt } from './domain';
+
+export async function createReportWorkbook(
+  technicians: Technician[], installations: Installation[], movements: Movement[], accounts: InventoryAccount[],
+  shifts: Shift[], attendance: Attendance[], logins: Attendance[], from: string, to: string,
+) {
+  const { Workbook } = ExcelJS;
+  const book = new Workbook();
+  book.creator = 'SecureTrack';
+  book.created = new Date();
+  const ids = new Set(technicians.map(t => t.uid));
+  const selected = (uid: string, date: string) => ids.has(uid) && date >= from && date <= to;
+  const name = (uid: string) => technicians.find(t => t.uid === uid)?.displayName || technicians.find(t => t.uid === uid)?.email || uid;
+
+  function sheet(title: string, rows: Record<string, string | number>[], fallback: string[]) {
+    const page = book.addWorksheet(title);
+    const keys = rows.length ? Object.keys(rows[0]) : fallback;
+    page.columns = keys.map(key => ({ header: key, key, width: Math.min(38, Math.max(16, key.length + 2)) }));
+    for (const row of rows) page.addRow(row);
+    page.views = [{ state: 'frozen', ySplit: 1 }];
+    page.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, page.rowCount), column: keys.length } };
+    page.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    page.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF146B50' } };
+    page.eachRow(row => { row.alignment = { vertical: 'top', wrapText: true }; });
+  }
+
+  if (!technicians.length) throw new Error('No technicians match this report.');
+
+  const usage = installations
+    .filter(i => selected(i.technician_id, dayKey(i.timestamp)))
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .map(i => ({
+      Date: dayKey(i.timestamp),
+      Technician: name(i.technician_id),
+      'Customer name': i.customer_ref,
+      'Vehicle plate': i.vehicle_ref || '—',
+      'Job type': jobLabel(i.job_type || 'new_installation'),
+      Device: i.device_model || '—',
+      'Device quantity': i.job_type === 'new_installation' || i.job_type === 'sim_device_change' || !i.job_type ? i.unit_count || 1 : 0,
+      SIM: i.sim_count ? i.sim_provider || 'Unassigned' : '—',
+      'SIM quantity': i.sim_count || 0,
+    }));
+  sheet('Customer usage', usage, ['Date', 'Technician', 'Customer name', 'Vehicle plate', 'Job type', 'Device', 'Device quantity', 'SIM', 'SIM quantity']);
+
+  const inventory = technicians.map(tech => {
+    const stock = stockAt(accounts.find(a => a.technician_id === tech.uid), movements.filter(m => m.technician_id === tech.uid), to);
+    const row: Record<string, string | number> = { Technician: tech.displayName || tech.email };
+    for (const model of DEVICE_MODELS) row[model] = stock ? stock[model] : 'Unavailable';
+    for (const provider of SIM_PROVIDERS) row[provider + ' SIM'] = stock ? stock[simStockKey(provider)] : 'Unavailable';
+    row['Unassigned SIM'] = stock ? stock.SIM : 'Unavailable';
+    row['Total devices'] = stock ? DEVICE_MODELS.reduce((sum, model) => sum + stock[model], 0) : 'Unavailable';
+    row['Total SIMs'] = simTotal(stock) ?? 'Unavailable';
+    return row;
+  });
+  sheet('Technician inventory', inventory, ['Technician', ...DEVICE_MODELS, 'Etisalat SIM', 'du SIM', 'International SIM', 'Unassigned SIM', 'Total devices', 'Total SIMs']);
+
+  const overtime = shifts.filter(s => selected(s.technician_id, s.date)).map(s => {
+    const job = installations.find(i => i.shift_id === s.id || i.id === s.id);
+    const arrival = attendance.find(a => a.id === s.id);
+    const minutes = overtimeMinutes(s, arrival, job);
+    return {
+      Technician: name(s.technician_id), Date: s.date, 'Customer name': s.company_name || s.site_name,
+      Started: arrival ? displayTime(arrival.timestamp, s.timezone) : displayTime(s.scheduled_at, s.timezone) + ' (assigned)',
+      Completed: job ? displayTime(job.timestamp, s.timezone) : 'Not completed', 'OT hours': Number((minutes / 60).toFixed(2)),
+    };
+  }).filter(row => Number(row['OT hours']) > 0);
+  sheet('Overtime', overtime, ['Technician', 'Date', 'Customer name', 'Started', 'Completed', 'OT hours']);
+
+  const loginRows = logins.filter(l => selected(l.technician_id, dayKey(l.timestamp))).map(l => ({
+    Technician: name(l.technician_id), Time: displayTime(l.timestamp), Latitude: l.latitude, Longitude: l.longitude, 'Accuracy (metres)': l.accuracy_m,
+  }));
+  sheet('Login locations', loginRows, ['Technician', 'Time', 'Latitude', 'Longitude', 'Accuracy (metres)']);
+  return book;
+}
+
+export async function downloadWorkbook(book: Awaited<ReturnType<typeof createReportWorkbook>>, filename: string) {
+  const data = await book.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([new Uint8Array(data)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
