@@ -6,6 +6,7 @@ import { auth, db } from './firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Attendance, Installation, InventoryAccount, Movement, PendingOperation, Role, Shift, Technician } from '../types';
 import { openingStock, validateOperation } from './domain';
+import { captureLocation } from './location';
 
 export const iso = (v: any): string => typeof v === 'string' ? v : v?.toDate?.().toISOString() || new Date().toISOString();
 export async function ensureProfile(user: User, name = '') {
@@ -85,9 +86,17 @@ export function syncOperations(user: Technician): Promise<void> {
   activeSync = (async () => {
     if (!navigator.onLine) return;
     await ensureInventory(user);
-    for (const op of await pending(user.uid)) {
-      await commitOperation(op, user);
-      await outbox.removeItem(op.uid + ':' + op.id);
+    while (true) {
+      const op = (await pending(user.uid))[0];
+      if (!op) break;
+      let ready = op;
+      if (op.kind === 'job-completed' && ![op.completion_latitude, op.completion_longitude, op.completion_accuracy_m].every(Number.isFinite)) {
+        const location = await captureLocation();
+        ready = { ...op, completion_latitude: location.latitude, completion_longitude: location.longitude, completion_accuracy_m: location.accuracy_m };
+        await outbox.setItem(ready.uid + ':' + ready.id, ready);
+      }
+      await commitOperation(ready, user);
+      await outbox.removeItem(ready.uid + ':' + ready.id);
     }
   })().finally(() => { activeSync = null; });
   return activeSync;
