@@ -11,3 +11,5 @@ coverage/
 *.keystore
 signing-key-info.txt
 deliverables/
+
+native-android/.gradle/

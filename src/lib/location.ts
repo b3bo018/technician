@@ -16,8 +16,15 @@ export function isAndroidAppContext() {
   return android && standalone;
 }
 
+export function isNativeAndroidApp() {
+  return /SecureTrackNative\//i.test(navigator.userAgent || '');
+}
+
 function messageForError(error: GeolocationPositionError) {
   if (error.code === 1) {
+    if (isNativeAndroidApp()) {
+      return 'Location permission is blocked for SecureTrack. Open Android Settings › Apps › SecureTrack › Permissions › Location, choose Allow while using the app, then tap Try again.';
+    }
     if (isAndroidAppContext()) {
       return 'Location is blocked for this site. In Chrome, open Settings › Site settings › Location and allow SecureTrack. Also keep Android Settings › Apps › Chrome › Permissions › Location set to Allow while using the app, then tap Try again.';
     }

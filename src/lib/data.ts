@@ -32,14 +32,15 @@ export function observe<T>(name: string, uid: string | null, map: (id: string, d
 }
 export const mapMovement = (id: string, d: any): Movement => ({ ...d, id, sim_provider: d.sim_provider || undefined, timestamp: iso(d.timestamp) });
 export const mapAccount = (_: string, d: any): InventoryAccount => ({ ...d, timestamp: iso(d.timestamp) });
-export const mapShift = (id: string, d: any): Shift => ({ ...d, id, company_name: d.company_name || d.customer_name || '', contact_person: d.contact_person || '', job_type: d.job_type || 'new_installation', unit_count: d.unit_count || 1, scheduled_at: iso(d.scheduled_at), window_start: iso(d.window_start), window_end: iso(d.window_end) });
+export const mapShift = (id: string, d: any): Shift => ({ ...d, id, company_name: d.company_name || d.customer_name || '', contact_person: d.contact_person || '', job_type: d.job_type || 'new_installation', unit_count: d.unit_count || 1, status:d.status||'assigned', assigned_at:iso(d.assigned_at||d.created_at), arrived_at:d.arrived_at?iso(d.arrived_at):undefined, completed_at:d.completed_at?iso(d.completed_at):undefined, scheduled_at: iso(d.scheduled_at), window_start: iso(d.window_start), window_end: iso(d.window_end) });
 export const mapAttendance = (id: string, d: any): Attendance => ({ ...d, id, timestamp: iso(d.timestamp) });
 export const mapInstallation = (id: string, d: any): Installation => ({
   id, technician_id: d.technician_id || d.tech_id, technician_name: d.technician_name || d.tech_email || '',
   shift_id: d.shift_id || '', job_type: d.job_type || 'new_installation', unit_count: d.unit_count || 1,
   device_model: d.device_model || d.device_type || '', device_imeis: d.device_imeis || (d.imei ? [d.imei] : []), sim_numbers: d.sim_numbers || (d.sim_number ? [d.sim_number] : []), sim_count: d.sim_count ?? (d.sim_number ? 1 : 0), sim_provider: d.sim_provider || undefined,
   customer_ref: d.customer_ref || d.customer_name || '', vehicle_ref: d.vehicle_ref || '', notes: d.notes || '',
-  timestamp: iso(d.timestamp), legacy: !d.technician_id
+  timestamp: iso(d.completed_at||d.timestamp), completed_at:iso(d.completed_at||d.timestamp), completion_latitude:d.completion_latitude, completion_longitude:d.completion_longitude, completion_accuracy_m:d.completion_accuracy_m, inspection_action:d.inspection_action,
+  legacy: !d.technician_id
 });
 const outbox = localforage.createInstance({ name: 'SecureTrackPWA', storeName: 'operations_v2' });
 export async function pending(uid: string): Promise<PendingOperation[]> {
@@ -57,20 +58,25 @@ export async function commitOperation(op: PendingOperation, user: Technician) {
   const moveRef = doc(db, 'inventory_logs', op.id);
   await runTransaction(db, async tx => {
     const installRef = doc(db, 'installations', op.id);
+    const shiftRef = doc(db, 'shifts', op.shift_id || op.id);
     const installation = await tx.get(installRef);
     if (installation.exists()) return;
     const existing = await tx.get(moveRef);
+    if (op.kind === 'job-completed') await tx.get(shiftRef);
     if (existing.exists()) throw new Error('This assignment has an incomplete inventory record. Contact an administrator.');
     if (op.quantity + op.sim_count > 0) {
       const movement = { technician_id: user.uid, technician_name: user.displayName || user.email, type: op.quantity ? 'installed' : 'sim-used', device_model: op.device_model, quantity: op.quantity, sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), timestamp: serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at)), notes: op.notes };
       tx.set(moveRef, movement);
     }
-    if (op.kind === 'installed' || op.kind === 'job-completed') tx.set(installRef, {
+    if (op.kind === 'installed' || op.kind === 'job-completed') {
+      tx.set(installRef, {
       technician_id: user.uid, technician_name: user.displayName || user.email, device_model: op.device_model,
       shift_id: op.shift_id || '', job_type: op.job_type || 'new_installation', unit_count: Math.max(op.quantity, op.sim_count, op.device_imeis?.length || 0, 1),
-      device_imeis: op.device_imeis || [], sim_numbers: op.sim_numbers || [], sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), customer_ref: op.customer_ref, vehicle_ref: op.vehicle_ref, notes: op.notes,
-      timestamp: serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at))
+      ...(op.inspection_action?{inspection_action:op.inspection_action}:{}), device_imeis: op.device_imeis || [], sim_numbers: op.sim_numbers || [], sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), customer_ref: op.customer_ref, vehicle_ref: op.vehicle_ref, notes: op.notes,
+      completion_latitude:op.completion_latitude,completion_longitude:op.completion_longitude,completion_accuracy_m:op.completion_accuracy_m,timestamp: serverTimestamp(),completed_at:serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at))
     });
+      if(op.kind==='job-completed')tx.update(shiftRef,{status:'completed',completed_at:serverTimestamp(),completion_latitude:op.completion_latitude,completion_longitude:op.completion_longitude,completion_accuracy_m:op.completion_accuracy_m});
+    }
   });
 }
 let activeSync: Promise<void> | null = null;
@@ -87,7 +93,7 @@ export function syncOperations(user: Technician): Promise<void> {
   return activeSync;
 }
 export async function saveShift(shift: Omit<Shift, 'id'>) {
-  const data = { ...shift, scheduled_at: Timestamp.fromDate(new Date(shift.scheduled_at)), window_start: Timestamp.fromDate(new Date(shift.window_start)), window_end: Timestamp.fromDate(new Date(shift.window_end)), created_at: serverTimestamp() };
+  const data = { ...shift, status:'assigned', scheduled_at: Timestamp.fromDate(new Date(shift.scheduled_at)), window_start: Timestamp.fromDate(new Date(shift.window_start)), window_end: Timestamp.fromDate(new Date(shift.window_end)), assigned_at:serverTimestamp(), created_at: serverTimestamp() };
   const batch = writeBatch(db); batch.set(doc(collection(db, 'shifts')), data); await batch.commit();
 }
 export async function updateShift(id:string,shift:Omit<Shift,'id'>){
@@ -104,9 +110,10 @@ export async function checkIn(shift: Shift, coords: { latitude: number; longitud
   if (!navigator.onLine) throw new Error('Connect to the internet to confirm attendance. Attendance uses the server time.');
   const ref = doc(db, 'attendance_logs', shift.id);
   await runTransaction(db, async tx => {
-    const existing = await tx.get(ref);
+    const existing = await tx.get(ref); const shiftRef=doc(db,'shifts',shift.id); await tx.get(shiftRef);
     if (existing.exists()) return;
     tx.set(ref, { technician_id: shift.technician_id, ...coords, timestamp: serverTimestamp() });
+    tx.update(shiftRef,{status:'in_progress',arrived_at:serverTimestamp()});
   });
 }
 export async function changeRole(uid: string, role: string) {
@@ -147,7 +154,7 @@ export async function legacyQueueCount() {
 
 export async function saveShifts(shifts: Omit<Shift, 'id'>[]) {
  const batch = writeBatch(db);
- for (const shift of shifts) batch.set(doc(collection(db,'shifts')), {...shift, scheduled_at: Timestamp.fromDate(new Date(shift.scheduled_at)), window_start: Timestamp.fromDate(new Date(shift.window_start)), window_end: Timestamp.fromDate(new Date(shift.window_end)), created_at: serverTimestamp()});
+ for (const shift of shifts) batch.set(doc(collection(db,'shifts')), {...shift,status:'assigned', scheduled_at: Timestamp.fromDate(new Date(shift.scheduled_at)), window_start: Timestamp.fromDate(new Date(shift.window_start)), window_end: Timestamp.fromDate(new Date(shift.window_end)), assigned_at:serverTimestamp(),created_at: serverTimestamp()});
  await batch.commit();
 }
 export async function recordLogin(uid: string, id: string, coords: {latitude:number;longitude:number;accuracy_m:number}) {

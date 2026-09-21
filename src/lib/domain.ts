@@ -4,7 +4,9 @@ export function dayKey(value: string | Date, timezone = TIME_ZONE): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
 }
 export function displayTime(value: string, timezone = TIME_ZONE) {
-  return new Date(value).toLocaleString('en-GB', { timeZone: timezone, dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23' });
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23' }).formatToParts(new Date(value));
+  const p = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}`;
 }
 export function localToISO(date: string, time: string, timezone = TIME_ZONE): string {
   const target = Date.parse(date + 'T' + time + ':00Z');
@@ -61,21 +63,29 @@ export function attendanceStatus(shift: Shift, checkin?: Attendance, now = Date.
     distance: Math.round(distance)
   };
 }
-export function validateOperation(op: { kind: string; device_model: string; quantity: number; sim_count: number; sim_provider?: SimProvider; customer_ref: string; shift_id?: string; job_type?: string; device_imeis?: string[]; sim_numbers?: string[] }) {
+export function validateOperation(op: { kind: string; device_model: string; quantity: number; sim_count: number; sim_provider?: SimProvider; customer_ref: string; shift_id?: string; job_type?: string; inspection_action?: string; device_imeis?: string[]; sim_numbers?: string[]; completion_latitude?:number; completion_longitude?:number; completion_accuracy_m?:number }) {
   if (!['received', 'installed', 'sim-used', 'job-completed'].includes(op.kind)) throw new Error('Choose a valid stock action.');
   if (!Number.isInteger(op.quantity) || !Number.isInteger(op.sim_count) || op.quantity < 0 || op.sim_count < 0 || op.quantity > 10000 || op.sim_count > 10000) throw new Error('Quantities must be whole numbers between 0 and 10,000.');
   if (op.quantity > 0 && !DEVICE_MODELS.includes(op.device_model as any)) throw new Error('Select a device model.');
-  if (op.quantity === 0 && op.device_model !== '') throw new Error('SIM-only entries must not include a device.');
+  if (op.quantity === 0 && op.device_model !== '' && op.kind !== 'job-completed') throw new Error('SIM-only entries must not include a device.');
   if (op.quantity + op.sim_count === 0 && op.kind !== 'job-completed') throw new Error('Enter a device or SIM quantity.');
   if (op.sim_count > 0 && !SIM_PROVIDERS.includes(op.sim_provider as SimProvider)) throw new Error('Choose Etisalat, du, or International for the SIM stock.');
   if (op.kind === 'sim-used' && (op.quantity !== 0 || op.sim_count < 1)) throw new Error('Enter the SIM quantity used.');
   if (op.kind === 'installed' && (op.quantity !== 1 || op.sim_count > 1 || !op.customer_ref.trim())) throw new Error('An installation requires one device and a customer reference, with zero or one SIM.');
   if (op.kind === 'job-completed') {
-    if (!op.shift_id || !['new_installation','sim_change','sim_device_change','device_removal'].includes(op.job_type || '')) throw new Error('This completion must belong to an assigned job.');
+    if (!op.shift_id || !['new_installation','sim_change','sim_device_change','device_removal','inspection'].includes(op.job_type || '')) throw new Error('This completion must belong to an assigned job.');
     if (!op.customer_ref.trim()) throw new Error('The assigned company is required.');
+    if (![op.completion_latitude,op.completion_longitude,op.completion_accuracy_m].every(Number.isFinite)) throw new Error('Current location is required to complete this job.');
     if (['new_installation','sim_device_change'].includes(op.job_type || '') && (!op.device_model || !op.device_imeis?.length || !op.sim_numbers?.length)) throw new Error('Scan or enter every device IMEI and SIM number.');
     if (op.job_type === 'sim_change' && !op.sim_numbers?.length) throw new Error('Scan or enter every replacement SIM number.');
     if (op.job_type === 'device_removal' && !op.device_imeis?.length) throw new Error('Scan or enter every removed device IMEI.');
+    if (op.job_type === 'inspection') {
+      if (!['check_only','device_change','sim_change','sim_device_change'].includes(op.inspection_action || '')) throw new Error('Choose the inspection result.');
+      const device = ['device_change','sim_device_change'].includes(op.inspection_action || '');
+      const sim = ['sim_change','sim_device_change'].includes(op.inspection_action || '');
+      if (device && (!op.device_model || !op.device_imeis?.length)) throw new Error('Scan or enter every replacement device IMEI.');
+      if (sim && !op.sim_numbers?.length) throw new Error('Scan or enter every replacement SIM number.');
+    }
   }
 }
 export function overtimeMinutes(shift: Shift, checkin: Attendance | undefined, installation: Installation | undefined) {

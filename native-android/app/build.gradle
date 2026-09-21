@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.securetrack.technician'
+    compileSdk 35
+    buildToolsVersion '35.0.0'
+
+    defaultConfig {
+        applicationId 'com.securetrack.technician'
+        minSdk 26
+        targetSdk 35
+        versionCode 20003
+        versionName '2.0.3'
+    }
+
+    signingConfigs {
+        release {
+            storeFile file(System.getenv('SECURETRACK_KEYSTORE'))
+            storePassword System.getenv('SECURETRACK_STORE_PASSWORD')
+            keyAlias System.getenv('SECURETRACK_KEY_ALIAS')
+            keyPassword System.getenv('SECURETRACK_KEY_PASSWORD')
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
