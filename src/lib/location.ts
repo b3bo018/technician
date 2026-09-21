@@ -19,7 +19,7 @@ export function isAndroidAppContext() {
 function messageForError(error: GeolocationPositionError) {
   if (error.code === 1) {
     if (isAndroidAppContext()) {
-      return 'Android did not finish sharing location with SecureTrack. Keep Location set to Allow while using the app, briefly switch away, then return here. SecureTrack will retry automatically.';
+      return 'Location is blocked for this site. In Chrome, open Settings › Site settings › Location and allow SecureTrack. Also keep Android Settings › Apps › Chrome › Permissions › Location set to Allow while using the app, then tap Try again.';
     }
     return 'Location permission is blocked for SecureTrack. Allow location for this site or PWA, then tap Try again.';
   }
@@ -70,9 +70,8 @@ export async function captureLocation(): Promise<LocationFix> {
     throw new LocationError('Location is unavailable in this browser. Open the live SecureTrack site in Safari or Chrome and try again.', 2);
   }
 
-  // Android Trusted Web Activities delegate the browser permission to a native
-  // activity. A one-shot watcher reliably activates that delegation on devices
-  // where getCurrentPosition incorrectly returns PERMISSION_DENIED.
+  // Keep one request active while Chrome resolves the site permission and GPS
+  // fix inside an installed Android app.
   if (isAndroidAppContext() && typeof (navigator.geolocation as Partial<Geolocation>).watchPosition === 'function') {
     return watchForPosition({
       enableHighAccuracy: true,
