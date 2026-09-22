@@ -6,7 +6,7 @@ service cloud.firestore {
   function profile(){return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;}
   function active(){return signedIn()&&profile().get('status','active')!='deactivated';}
   function role(r){return active()&&profile().role==r;}
-  function staff(){return active()&&profile().role in ['master_admin','admin','manager','accountant','hr','it'];}
+  function staff(){return active()&&profile().role in ['master_admin','owner','admin','manager','accountant','hr','it'];}
   function master(){return role('master_admin');}
   function stockAdmin(){return active()&&profile().role in ['master_admin','admin','accountant'];}
   function assigner(){return active()&&profile().role in ['master_admin','admin'];}
@@ -27,10 +27,10 @@ service cloud.firestore {
    allow read: if owner(uid)||staff();
    allow create: if master()&&request.resource.data.keys().hasOnly(['uid','email','displayName','photoDataUrl','role','status','inventory_count','inventory_breakdown','created_at'])
     &&request.resource.data.uid==uid&&request.resource.data.email is string&&request.resource.data.displayName is string&&request.resource.data.displayName.size()>0&&request.resource.data.displayName.size()<=160
-    &&request.resource.data.role in ['admin','manager','accountant','hr','it','technician']&&request.resource.data.status=='active'&&request.resource.data.inventory_count==0&&validPhoto(request.resource.data)
+    &&request.resource.data.role in ['owner','admin','manager','accountant','hr','it','technician']&&request.resource.data.status=='active'&&request.resource.data.inventory_count==0&&validPhoto(request.resource.data)
     &&request.resource.data.inventory_breakdown=={'fmc920':0,'fmc130':0,'sim_cards':0}&&request.resource.data.created_at==request.time;
    allow update: if (master()&&uid!=request.auth.uid&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','status','photoDataUrl'])
-    &&request.resource.data.role in ['admin','manager','accountant','hr','it','technician']&&request.resource.data.get('status','active') in ['active','deactivated']&&validPhoto(request.resource.data))
+    &&request.resource.data.role in ['owner','admin','manager','accountant','hr','it','technician']&&request.resource.data.get('status','active') in ['active','deactivated']&&validPhoto(request.resource.data))
     ||(owner(uid)&&active()&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','photoDataUrl'])&&request.resource.data.displayName is string&&request.resource.data.displayName.size()<=160&&validPhoto(request.resource.data));
    allow delete: if master()&&uid!=request.auth.uid;
   }
@@ -43,7 +43,7 @@ service cloud.firestore {
    allow delete: if master();
   }
   match /inventory_logs/{id} {
-   function validMovement(d){return d.keys().hasOnly(['technician_id','technician_name','type','device_model','quantity','sim_count','sim_provider','timestamp','captured_at','notes'])&&d.technician_name is string&&d.notes is string&&d.notes.size()<=1000&&integer(d.quantity)&&integer(d.sim_count)&&d.quantity+d.sim_count>0&&((d.quantity==0&&d.device_model=='')||(d.quantity>0&&model(d.device_model)))&&(!d.keys().hasAny(['sim_provider'])||simProvider(d.sim_provider))&&d.timestamp==request.time&&d.captured_at is timestamp;}
+   function validMovement(d){return d.keys().hasOnly(['technician_id','technician_name','type','device_model','quantity','sim_count','device_imeis','sim_provider','timestamp','captured_at','notes'])&&d.technician_name is string&&d.notes is string&&d.notes.size()<=1000&&integer(d.quantity)&&integer(d.sim_count)&&d.quantity+d.sim_count>0&&((d.quantity==0&&d.device_model=='')||(d.quantity>0&&model(d.device_model)))&&(!d.keys().hasAny(['device_imeis'])||(d.device_imeis is list&&d.device_imeis.size()<=d.quantity))&&(!d.keys().hasAny(['sim_provider'])||simProvider(d.sim_provider))&&d.timestamp==request.time&&d.captured_at is timestamp;}
    function validAdjustment(d){return d.keys().hasOnly(['technician_id','technician_name','type','device_model','quantity','sim_count','quantity_delta','sim_delta','sim_provider','timestamp','captured_at','notes'])&&d.type=='adjustment'&&d.technician_name is string&&d.notes is string&&d.notes.size()>0&&d.notes.size()<=1000&&d.quantity==0&&d.sim_count==0&&d.quantity_delta is int&&d.quantity_delta>=-10000&&d.quantity_delta<=10000&&d.sim_delta is int&&d.sim_delta>=-10000&&d.sim_delta<=10000&&((model(d.device_model)&&d.quantity_delta!=0&&d.sim_delta==0)||(d.device_model==''&&d.quantity_delta==0&&d.sim_delta!=0))&&(!d.keys().hasAny(['sim_provider'])||simProvider(d.sim_provider))&&d.timestamp==request.time&&d.captured_at==request.time;}
    allow get: if active()&&!exists(/databases/$(database)/documents/inventory_logs/$(id));
    allow read: if active()&&(resource.data.technician_id==request.auth.uid||staff());

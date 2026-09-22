@@ -211,7 +211,7 @@ export async function issueStock(user:Technician, op:Omit<PendingOperation,'uid'
  await runTransaction(db,async tx=>{const ref=doc(db,'inventory_accounts',user.uid);const existing=await tx.get(ref);const profile=await tx.get(doc(db,'users',user.uid));
  if(!profile.exists()||profile.data().role!=='technician'||profile.data().status==='deactivated')throw new Error('Choose an active technician.');
  if(!existing.exists())tx.set(ref,{technician_id:user.uid,opening:openingStock({...profile.data(),uid:user.uid} as Technician),timestamp:serverTimestamp()});
- tx.set(movement,{technician_id:user.uid,technician_name:user.displayName||user.email,type:'received',device_model:op.device_model,quantity:op.quantity,sim_count:op.sim_count,...(op.sim_count?{sim_provider:op.sim_provider}:{}),notes:op.notes,timestamp:serverTimestamp(),captured_at:serverTimestamp()});});
+ tx.set(movement,{technician_id:user.uid,technician_name:user.displayName||user.email,type:'received',device_model:op.device_model,quantity:op.quantity,sim_count:op.sim_count,...(op.device_imeis?.length?{device_imeis:op.device_imeis}:{}),...(op.sim_count?{sim_provider:op.sim_provider}:{}),notes:op.notes,timestamp:serverTimestamp(),captured_at:serverTimestamp()});});
 }
 
 export async function adjustInventory(user:Technician,current:Stock,target:Stock,notes:string){
