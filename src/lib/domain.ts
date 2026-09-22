@@ -38,6 +38,11 @@ export function stockAt(account: InventoryAccount | undefined, movements: Moveme
   const stock = { ...emptyStock(), ...account.opening };
   for (const m of movements) {
     if (through && dayKey(m.timestamp) > through) continue;
+    if(m.type==='adjustment'){
+      if(m.device_model)stock[m.device_model]+=m.quantity_delta||0;
+      else stock[simStockKey(m.sim_provider)]+=m.sim_delta||0;
+      continue;
+    }
     const sign = m.type === 'received' ? 1 : -1;
     if (m.device_model) stock[m.device_model] += sign * m.quantity;
     stock[simStockKey(m.sim_provider)] += sign * m.sim_count;
@@ -63,7 +68,7 @@ export function attendanceStatus(shift: Shift, checkin?: Attendance, now = Date.
     distance: Math.round(distance)
   };
 }
-export function validateOperation(op: { kind: string; device_model: string; quantity: number; sim_count: number; sim_provider?: SimProvider; customer_ref: string; shift_id?: string; job_type?: string; inspection_action?: string; device_imeis?: string[]; sim_numbers?: string[]; completion_latitude?:number; completion_longitude?:number; completion_accuracy_m?:number }) {
+export function validateOperation(op: { kind: string; device_model: string; quantity: number; sim_count: number; sim_provider?: SimProvider; customer_ref: string; shift_id?: string; job_type?: string; inspection_action?: string; unit_records?:unknown[]; device_imeis?: string[]; sim_numbers?: string[]; completion_latitude?:number; completion_longitude?:number; completion_accuracy_m?:number }) {
   if (!['received', 'installed', 'sim-used', 'job-completed'].includes(op.kind)) throw new Error('Choose a valid stock action.');
   if (!Number.isInteger(op.quantity) || !Number.isInteger(op.sim_count) || op.quantity < 0 || op.sim_count < 0 || op.quantity > 10000 || op.sim_count > 10000) throw new Error('Quantities must be whole numbers between 0 and 10,000.');
   if (op.quantity > 0 && !DEVICE_MODELS.includes(op.device_model as any)) throw new Error('Select a device model.');
@@ -73,12 +78,14 @@ export function validateOperation(op: { kind: string; device_model: string; quan
   if (op.kind === 'sim-used' && (op.quantity !== 0 || op.sim_count < 1)) throw new Error('Enter the SIM quantity used.');
   if (op.kind === 'installed' && (op.quantity !== 1 || op.sim_count > 1 || !op.customer_ref.trim())) throw new Error('An installation requires one device and a customer reference, with zero or one SIM.');
   if (op.kind === 'job-completed') {
-    if (!op.shift_id || !['new_installation','sim_change','sim_device_change','device_removal','inspection'].includes(op.job_type || '')) throw new Error('This completion must belong to an assigned job.');
+    if (!op.shift_id || !['new_installation','device_change','sim_change','sim_device_change','device_removal','inspection','mixed'].includes(op.job_type || '')) throw new Error('This completion must belong to an assigned job.');
     if (!op.customer_ref.trim()) throw new Error('The assigned company is required.');
     if (![op.completion_latitude,op.completion_longitude,op.completion_accuracy_m].every(Number.isFinite)) throw new Error('Current location is required to complete this job.');
     if (['new_installation','sim_device_change'].includes(op.job_type || '') && (!op.device_model || !op.device_imeis?.length || !op.sim_numbers?.length)) throw new Error('Scan or enter every device IMEI and SIM number.');
+    if (op.job_type === 'device_change' && (!op.device_model || !op.device_imeis?.length)) throw new Error('Scan or enter every replacement device IMEI.');
     if (op.job_type === 'sim_change' && !op.sim_numbers?.length) throw new Error('Scan or enter every replacement SIM number.');
-    if (op.job_type === 'device_removal' && !op.device_imeis?.length) throw new Error('Scan or enter every removed device IMEI.');
+    if (op.job_type === 'device_removal' && ((op.device_imeis?.length||0)>0||(op.sim_numbers?.length||0)>0)) throw new Error('Removal jobs do not require device or SIM scanning.');
+    if (op.job_type === 'mixed' && !op.unit_records?.length) throw new Error('Complete the work record for every vehicle.');
     if (op.job_type === 'inspection') {
       if (!['check_only','device_change','sim_change','sim_device_change'].includes(op.inspection_action || '')) throw new Error('Choose the inspection result.');
       const device = ['device_change','sim_device_change'].includes(op.inspection_action || '');
@@ -109,8 +116,8 @@ export function workDurationMinutes(shift: Shift, checkin: Attendance | undefine
 export function jobPerformanceScore(shift: Shift, checkin: Attendance | undefined, installation: Installation | undefined) {
   const minutes = workDurationMinutes(shift, checkin, installation);
   if (!minutes) return 0;
-  const perUnit = ['new_installation','sim_device_change'].includes(shift.job_type) ? 120 : 60;
-  const expected = perUnit * Math.max(1, shift.unit_count || 1);
+  const types=shift.unit_jobs?.map(item=>item.job_type)||Array(Math.max(1,shift.unit_count||1)).fill(shift.job_type);
+  const expected = types.reduce((sum,type)=>sum+(['new_installation','sim_device_change'].includes(type)?120:type==='device_change'?90:60),0);
   return Math.max(0, Math.min(100, Math.round(expected / minutes * 100)));
 }
 export function csvCell(value: unknown) {

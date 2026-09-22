@@ -4,7 +4,7 @@ import { collection, deleteField, doc, getDocs, onSnapshot, query, runTransactio
 import localforage from 'localforage';
 import { auth, db } from './firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Attendance, Installation, InventoryAccount, Movement, PendingOperation, Role, Shift, Technician } from '../types';
+import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, PendingOperation, Role, SIM_PROVIDERS, SIM_STOCK_KEYS, Shift, Stock, Technician, WorkBreak, WorkSession } from '../types';
 import { openingStock, validateOperation } from './domain';
 import { captureLocation } from './location';
 
@@ -35,10 +35,12 @@ export const mapMovement = (id: string, d: any): Movement => ({ ...d, id, sim_pr
 export const mapAccount = (_: string, d: any): InventoryAccount => ({ ...d, timestamp: iso(d.timestamp) });
 export const mapShift = (id: string, d: any): Shift => ({ ...d, id, company_name: d.company_name || d.customer_name || '', contact_person: d.contact_person || '', job_type: d.job_type || 'new_installation', unit_count: d.unit_count || 1, status:d.status||'assigned', assigned_at:iso(d.assigned_at||d.created_at), arrived_at:d.arrived_at?iso(d.arrived_at):undefined, completed_at:d.completed_at?iso(d.completed_at):undefined, scheduled_at: iso(d.scheduled_at), window_start: iso(d.window_start), window_end: iso(d.window_end) });
 export const mapAttendance = (id: string, d: any): Attendance => ({ ...d, id, timestamp: iso(d.timestamp) });
+export const mapWorkSession = (id:string,d:any):WorkSession => ({...d,id,clock_in_at:iso(d.clock_in_at),clock_out_at:d.clock_out_at?iso(d.clock_out_at):undefined});
+export const mapWorkBreak = (id:string,d:any):WorkBreak => ({...d,id,started_at:iso(d.started_at),ended_at:d.ended_at?iso(d.ended_at):undefined});
 export const mapInstallation = (id: string, d: any): Installation => ({
   id, technician_id: d.technician_id || d.tech_id, technician_name: d.technician_name || d.tech_email || '',
   shift_id: d.shift_id || '', job_type: d.job_type || 'new_installation', unit_count: d.unit_count || 1,
-  device_model: d.device_model || d.device_type || '', device_imeis: d.device_imeis || (d.imei ? [d.imei] : []), sim_numbers: d.sim_numbers || (d.sim_number ? [d.sim_number] : []), sim_count: d.sim_count ?? (d.sim_number ? 1 : 0), sim_provider: d.sim_provider || undefined,
+  unit_records:d.unit_records||undefined,device_model: d.device_model || d.device_type || '', device_imeis: d.device_imeis || (d.imei ? [d.imei] : []), sim_numbers: d.sim_numbers || (d.sim_number ? [d.sim_number] : []), sim_count: d.sim_count ?? (d.sim_number ? 1 : 0), sim_provider: d.sim_provider || undefined,
   customer_ref: d.customer_ref || d.customer_name || '', vehicle_ref: d.vehicle_ref || '', notes: d.notes || '',
   timestamp: iso(d.completed_at||d.timestamp), completed_at:iso(d.completed_at||d.timestamp), completion_latitude:d.completion_latitude, completion_longitude:d.completion_longitude, completion_accuracy_m:d.completion_accuracy_m, inspection_action:d.inspection_action,
   legacy: !d.technician_id
@@ -63,7 +65,7 @@ export async function commitOperation(op: PendingOperation, user: Technician) {
     const installation = await tx.get(installRef);
     if (installation.exists()) return;
     const existing = await tx.get(moveRef);
-    if (op.kind === 'job-completed') await tx.get(shiftRef);
+    const assigned = op.kind === 'job-completed' ? await tx.get(shiftRef) : null;
     if (existing.exists()) throw new Error('This assignment has an incomplete inventory record. Contact an administrator.');
     if (op.quantity + op.sim_count > 0) {
       const movement = { technician_id: user.uid, technician_name: user.displayName || user.email, type: op.quantity ? 'installed' : 'sim-used', device_model: op.device_model, quantity: op.quantity, sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), timestamp: serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at)), notes: op.notes };
@@ -72,8 +74,8 @@ export async function commitOperation(op: PendingOperation, user: Technician) {
     if (op.kind === 'installed' || op.kind === 'job-completed') {
       tx.set(installRef, {
       technician_id: user.uid, technician_name: user.displayName || user.email, device_model: op.device_model,
-      shift_id: op.shift_id || '', job_type: op.job_type || 'new_installation', unit_count: Math.max(op.quantity, op.sim_count, op.device_imeis?.length || 0, 1),
-      ...(op.inspection_action?{inspection_action:op.inspection_action}:{}), device_imeis: op.device_imeis || [], sim_numbers: op.sim_numbers || [], sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), customer_ref: op.customer_ref, vehicle_ref: op.vehicle_ref, notes: op.notes,
+      shift_id: op.shift_id || '', job_type: op.job_type || 'new_installation', unit_count: op.unit_count||assigned?.data()?.unit_count||Math.max(op.quantity, op.sim_count, op.device_imeis?.length || 0, 1),
+      ...(op.inspection_action?{inspection_action:op.inspection_action}:{}),...(op.unit_records?{unit_records:op.unit_records}:{}), device_imeis: op.device_imeis || [], sim_numbers: op.sim_numbers || [], sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), customer_ref: op.customer_ref, vehicle_ref: op.vehicle_ref, notes: op.notes,
       completion_latitude:op.completion_latitude,completion_longitude:op.completion_longitude,completion_accuracy_m:op.completion_accuracy_m,timestamp: serverTimestamp(),completed_at:serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at))
     });
       if(op.kind==='job-completed')tx.update(shiftRef,{status:'completed',completed_at:serverTimestamp(),completion_latitude:op.completion_latitude,completion_longitude:op.completion_longitude,completion_accuracy_m:op.completion_accuracy_m});
@@ -90,6 +92,7 @@ export function syncOperations(user: Technician): Promise<void> {
       const op = (await pending(user.uid))[0];
       if (!op) break;
       let ready = op;
+      if(op.kind==='job-completed'&&op.job_type==='device_removal')ready={...op,unit_count:op.unit_count,device_model:'',device_imeis:[],sim_numbers:[],quantity:0,sim_count:0,sim_provider:undefined};
       if (op.kind === 'job-completed' && ![op.completion_latitude, op.completion_longitude, op.completion_accuracy_m].every(Number.isFinite)) {
         const location = await captureLocation();
         ready = { ...op, completion_latitude: location.latitude, completion_longitude: location.longitude, completion_accuracy_m: location.accuracy_m };
@@ -102,8 +105,7 @@ export function syncOperations(user: Technician): Promise<void> {
   return activeSync;
 }
 export async function saveShift(shift: Omit<Shift, 'id'>) {
-  const data = { ...shift, status:'assigned', scheduled_at: Timestamp.fromDate(new Date(shift.scheduled_at)), window_start: Timestamp.fromDate(new Date(shift.window_start)), window_end: Timestamp.fromDate(new Date(shift.window_end)), assigned_at:serverTimestamp(), created_at: serverTimestamp() };
-  const batch = writeBatch(db); batch.set(doc(collection(db, 'shifts')), data); await batch.commit();
+  await saveShifts([shift]);
 }
 export async function updateShift(id:string,shift:Omit<Shift,'id'>){
  const data={...shift,latitude:shift.latitude??deleteField(),longitude:shift.longitude??deleteField(),scheduled_at:Timestamp.fromDate(new Date(shift.scheduled_at)),window_start:Timestamp.fromDate(new Date(shift.window_start)),window_end:Timestamp.fromDate(new Date(shift.window_end)),updated_at:serverTimestamp()};
@@ -130,7 +132,7 @@ export async function changeRole(uid: string, role: string) {
 }
 export async function removeManagedAccount(uid:string){
  const refs=new Map<string,ReturnType<typeof doc>>();
- for(const [name,field] of [['shifts','technician_id'],['attendance_logs','technician_id'],['login_logs','technician_id'],['installations','technician_id'],['installations','tech_id'],['inventory_logs','technician_id']] as const){
+ for(const [name,field] of [['shifts','technician_id'],['attendance_logs','technician_id'],['login_logs','technician_id'],['work_sessions','technician_id'],['work_breaks','technician_id'],['installations','technician_id'],['installations','tech_id'],['inventory_logs','technician_id']] as const){
   const snapshot=await getDocs(query(collection(db,name),where(field,'==',uid)));
   snapshot.docs.forEach(item=>refs.set(item.ref.path,item.ref));
  }
@@ -162,15 +164,31 @@ export async function legacyQueueCount() {
 }
 
 export async function saveShifts(shifts: Omit<Shift, 'id'>[]) {
- const batch = writeBatch(db);
- for (const shift of shifts) batch.set(doc(collection(db,'shifts')), {...shift,status:'assigned', scheduled_at: Timestamp.fromDate(new Date(shift.scheduled_at)), window_start: Timestamp.fromDate(new Date(shift.window_start)), window_end: Timestamp.fromDate(new Date(shift.window_end)), assigned_at:serverTimestamp(),created_at: serverTimestamp()});
- await batch.commit();
+ await runTransaction(db,async tx=>{const counterRef=doc(db,'counters','jobs');const counter=await tx.get(counterRef);const start=(counter.data()?.value||0)+1;tx.set(counterRef,{value:start+shifts.length-1,updated_at:serverTimestamp()},{merge:true});shifts.forEach((shift,index)=>tx.set(doc(collection(db,'shifts')),{...shift,job_reference:`ST${String(start+index).padStart(5,'0')}`,status:'assigned',scheduled_at:Timestamp.fromDate(new Date(shift.scheduled_at)),window_start:Timestamp.fromDate(new Date(shift.window_start)),window_end:Timestamp.fromDate(new Date(shift.window_end)),assigned_at:serverTimestamp(),created_at:serverTimestamp()}))});
 }
 export async function recordLogin(uid: string, id: string, coords: {latitude:number;longitude:number;accuracy_m:number}) {
  await runTransaction(db, async tx => {
   const ref=doc(db,'login_logs',id); const existing=await tx.get(ref);
   if (!existing.exists()) tx.set(ref,{technician_id:uid,...coords,timestamp:serverTimestamp()});
  });
+}
+
+export async function clockInWorkday(user:Technician,date:string,coords:{latitude:number;longitude:number;accuracy_m:number}){
+ if(!navigator.onLine)throw new Error('Connect to the internet to clock in. Work times use the server clock.');
+ const id=`${user.uid}_${date}`;const ref=doc(db,'work_sessions',id);
+ await runTransaction(db,async tx=>{const existing=await tx.get(ref);if(existing.exists())return;tx.set(ref,{technician_id:user.uid,technician_name:user.displayName||user.email,date,timezone:'Asia/Dubai',status:'active',clock_in_at:serverTimestamp(),clock_in_latitude:coords.latitude,clock_in_longitude:coords.longitude,clock_in_accuracy_m:coords.accuracy_m})});
+}
+export async function clockOutWorkday(session:WorkSession,coords:{latitude:number;longitude:number;accuracy_m:number}){
+ if(!navigator.onLine)throw new Error('Connect to the internet to clock out. Work times use the server clock.');
+ await updateDoc(doc(db,'work_sessions',session.id),{status:'clocked_out',clock_out_at:serverTimestamp(),clock_out_latitude:coords.latitude,clock_out_longitude:coords.longitude,clock_out_accuracy_m:coords.accuracy_m});
+}
+export async function startWorkBreak(session:WorkSession){
+ if(!navigator.onLine)throw new Error('Connect to the internet to start a break.');
+ const ref=doc(collection(db,'work_breaks'));await setDoc(ref,{session_id:session.id,technician_id:session.technician_id,date:session.date,status:'active',started_at:serverTimestamp()});
+}
+export async function endWorkBreak(item:WorkBreak){
+ if(!navigator.onLine)throw new Error('Connect to the internet to end a break.');
+ await updateDoc(doc(db,'work_breaks',item.id),{status:'ended',ended_at:serverTimestamp()});
 }
 
 export async function issueStock(user:Technician, op:Omit<PendingOperation,'uid'|'id'|'captured_at'>) {
@@ -180,4 +198,13 @@ export async function issueStock(user:Technician, op:Omit<PendingOperation,'uid'
  if(!profile.exists()||profile.data().role!=='technician'||profile.data().status==='deactivated')throw new Error('Choose an active technician.');
  if(!existing.exists())tx.set(ref,{technician_id:user.uid,opening:openingStock({...profile.data(),uid:user.uid} as Technician),timestamp:serverTimestamp()});
  tx.set(movement,{technician_id:user.uid,technician_name:user.displayName||user.email,type:'received',device_model:op.device_model,quantity:op.quantity,sim_count:op.sim_count,...(op.sim_count?{sim_provider:op.sim_provider}:{}),notes:op.notes,timestamp:serverTimestamp(),captured_at:serverTimestamp()});});
+}
+
+export async function adjustInventory(user:Technician,current:Stock,target:Stock,notes:string){
+ if(!notes.trim())throw new Error('Enter a reason for the inventory correction.');
+ const changes:[string,number,'device'|'sim'][]=[];
+ DEVICE_MODELS.forEach(key=>{const delta=target[key]-current[key];if(delta)changes.push([key,delta,'device'])});
+ SIM_STOCK_KEYS.forEach(key=>{const delta=target[key]-current[key];if(delta)changes.push([key,delta,'sim'])});
+ if(!changes.length)throw new Error('No inventory quantities were changed.');
+ const batch=writeBatch(db);for(const[key,delta,kind]of changes){const provider=kind==='sim'&&key!=='SIM'?SIM_PROVIDERS.find(value=>key===`SIM ${value}`):undefined;batch.set(doc(collection(db,'inventory_logs')),{technician_id:user.uid,technician_name:user.displayName||user.email,type:'adjustment',device_model:kind==='device'?key:'',quantity:0,sim_count:0,quantity_delta:kind==='device'?delta:0,sim_delta:kind==='sim'?delta:0,...(provider?{sim_provider:provider}:{}),timestamp:serverTimestamp(),captured_at:serverTimestamp(),notes:notes.trim()})}await batch.commit();
 }
