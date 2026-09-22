@@ -43,6 +43,7 @@ export const mapInstallation = (id: string, d: any): Installation => ({
   unit_records:d.unit_records||undefined,device_model: d.device_model || d.device_type || '', device_imeis: d.device_imeis || (d.imei ? [d.imei] : []), sim_numbers: d.sim_numbers || (d.sim_number ? [d.sim_number] : []), sim_count: d.sim_count ?? (d.sim_number ? 1 : 0), sim_provider: d.sim_provider || undefined,
   customer_ref: d.customer_ref || d.customer_name || '', vehicle_ref: d.vehicle_ref || '', notes: d.notes || '',
   timestamp: iso(d.completed_at||d.timestamp), completed_at:iso(d.completed_at||d.timestamp), completion_latitude:d.completion_latitude, completion_longitude:d.completion_longitude, completion_accuracy_m:d.completion_accuracy_m, inspection_action:d.inspection_action,
+  completion_source:d.completion_source||undefined,completed_by_uid:d.completed_by_uid||undefined,completed_by_name:d.completed_by_name||undefined,completed_by_role:d.completed_by_role||undefined,completion_reason:d.completion_reason||undefined,
   legacy: !d.technician_id
 });
 const outbox = localforage.createInstance({ name: 'SecureTrackPWA', storeName: 'operations_v2' });
@@ -116,6 +117,19 @@ export async function deleteShift(id:string){
  batch.delete(doc(db,'attendance_logs',id));
  batch.delete(doc(db,'shifts',id));
  await batch.commit();
+}
+export async function adminCompleteJob(shift:Shift,actor:Technician,reason:string){
+ if(!['admin','master_admin'].includes(actor.role))throw new Error('Only an administrator can mark a job completed.');
+ if(auth.currentUser?.uid!==actor.uid)throw new Error('Sign in again before completing this job.');
+ const completionReason=reason.trim();if(!completionReason)throw new Error('Enter why the administrator is completing this job.');
+ const shiftRef=doc(db,'shifts',shift.id);const installationRef=doc(db,'installations',shift.id);
+ await runTransaction(db,async tx=>{
+  const existing=await tx.get(installationRef);if(existing.exists())throw new Error('This job is already completed.');
+  const current=await tx.get(shiftRef);if(!current.exists())throw new Error('This job no longer exists.');
+  if(current.data().status==='completed')throw new Error('This job is already completed.');
+  tx.set(installationRef,{technician_id:shift.technician_id,technician_name:shift.technician_name,shift_id:shift.id,job_type:shift.job_type,unit_count:shift.unit_count,device_model:'',device_imeis:[],sim_numbers:[],sim_count:0,customer_ref:shift.company_name||shift.customer_name||shift.site_name,vehicle_ref:(shift.vehicle_numbers?.length?shift.vehicle_numbers:[shift.vehicle_number]).filter(Boolean).join(' · '),notes:'',completion_source:'admin_override',completed_by_uid:actor.uid,completed_by_name:actor.displayName||actor.email,completed_by_role:actor.role,completion_reason:completionReason,timestamp:serverTimestamp(),completed_at:serverTimestamp(),captured_at:serverTimestamp()});
+  tx.update(shiftRef,{status:'completed',completed_at:serverTimestamp()});
+ });
 }
 export async function checkIn(shift: Shift, coords: { latitude: number; longitude: number; accuracy_m: number }) {
   if (!navigator.onLine) throw new Error('Connect to the internet to confirm attendance. Attendance uses the server time.');
