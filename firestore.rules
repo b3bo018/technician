@@ -34,6 +34,11 @@ service cloud.firestore {
     ||(owner(uid)&&active()&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','photoDataUrl'])&&request.resource.data.displayName is string&&request.resource.data.displayName.size()<=160&&validPhoto(request.resource.data));
    allow delete: if master()&&uid!=request.auth.uid;
   }
+  match /settings/{id} {
+   allow read: if active();
+   allow create, update: if stockAdmin()&&id=='stock_alerts'&&request.resource.data.keys().hasOnly(['threshold','updated_at'])&&request.resource.data.threshold is int&&request.resource.data.threshold>=0&&request.resource.data.threshold<=10000&&request.resource.data.updated_at==request.time;
+   allow delete: if master();
+  }
   match /inventory_accounts/{uid} {
    function legacyBalance(){let p=get(/databases/$(database)/documents/users/$(uid)).data;let b=p.get('inventory_breakdown',{});let total=p.get('inventory_count',0);return{'FMC920':b.get('fmc920',math.floor(total / 2)),'FMC130':b.get('fmc130',math.ceil(total / 2)),'FMC125':0,'FMM130':0,'FMM125':0,'Jimi VL03':0,'GT06':0,'GT06N':0,'LV02':0,'Ruptela':0,'SIM Etisalat':0,'SIM du':0,'SIM International':0,'SIM':b.get('sim_cards',0)};}
    function oldLegacyBalance(){let p=get(/databases/$(database)/documents/users/$(uid)).data;let b=p.get('inventory_breakdown',{});let total=p.get('inventory_count',0);return{'FMC920':b.get('fmc920',math.floor(total / 2)),'FMC130':b.get('fmc130',math.ceil(total / 2)),'FMC125':0,'FMM130':0,'FMM125':0,'Jimi VL03':0,'GT06':0,'GT06N':0,'LV02':0,'Ruptela':0,'SIM':b.get('sim_cards',0)};}
