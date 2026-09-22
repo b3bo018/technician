@@ -5,7 +5,7 @@ import { BarChart3, BriefcaseBusiness, CalendarCheck, CalendarPlus, ClipboardLis
 import { auth } from './lib/firebase';
 import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, PendingOperation, Shift, Technician, WorkBreak, WorkSession, roleLabel } from './types';
 import { ensureInventory, ensureProfile, legacyQueueCount, mapAccount, mapAttendance, mapInstallation, mapMovement, mapShift, mapWorkBreak, mapWorkSession, observe, observeProfile, pending, queueOperation, syncOperations } from './lib/data';
-import { TIME_ZONE, attendanceStatus, dayKey, displayTime, simTotal, stockAt } from './lib/domain';
+import { TIME_ZONE, attendanceStatus, dayKey, displayTime, simTotal, sortJobsByTime, stockAt } from './lib/domain';
 import { LoginScreen } from './components/LoginScreen';
 import { StockGrid } from './components/StockGrid';
 import { AttendancePanel } from './components/AttendancePanel';
@@ -78,7 +78,7 @@ export default function App() {
  const ownInstallations=allInstallations.filter(i=>i.technician_id===user?.uid);
  const ownMoves=movements.filter(m=>m.technician_id===user?.uid).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
  const stock=stockAt(accounts.find(a=>a.technician_id===user?.uid),ownMoves);
- const ownShifts=shifts.filter(s=>s.technician_id===user?.uid).sort((a,b)=>a.scheduled_at.localeCompare(b.scheduled_at));
+ const ownShifts=shifts.filter(s=>s.technician_id===user?.uid).sort(sortJobsByTime);
  const today=dayKey(new Date(now)); const todayShifts=ownShifts.filter(s=>s.date===today);
  const todayWorkSession=workSessions.find(s=>s.technician_id===user?.uid&&s.date===today);
  const completed=todayShifts.filter(s=>attendance.some(a=>a.id===s.id)).length;

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "585832495483",
+    "project_id": "securetrack-technician-b3bo018",
+    "storage_bucket": "securetrack-technician-b3bo018.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:585832495483:android:edccd52a7711b1ff3565de",
+        "android_client_info": {
+          "package_name": "com.securetrack.fieldoperations"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6nrTC2hSKbSeyE-85ckfV-4yKF7dhC6c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

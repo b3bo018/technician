@@ -4,10 +4,18 @@ export function dayKey(value: string | Date, timezone = TIME_ZONE): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
 }
 export function displayTime(value: string, timezone = TIME_ZONE) {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year:'numeric', month:'2-digit', day:'2-digit', hour:'numeric', minute:'2-digit', hour12:true }).formatToParts(new Date(value));
-  const p = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute} ${String(p.dayPeriod||'').toUpperCase()}`;
+  const date = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date(value)).replaceAll('/','-');
+  return `${date} ${displayTimeOnly(value,timezone)}`;
 }
+export function displayTimeOnly(value: string, timezone = TIME_ZONE) { return new Intl.DateTimeFormat('en-US',{timeZone:timezone,hour:'numeric',minute:'2-digit',hour12:true}).format(new Date(value)).toUpperCase(); }
+export function jobTimeValue(shift: Pick<Shift,'scheduled_at'|'assigned_at'|'date'>) {
+ const scheduled=Date.parse(shift.scheduled_at||'');
+ if(Number.isFinite(scheduled))return scheduled;
+ const assigned=Date.parse(shift.assigned_at||'');
+ if(Number.isFinite(assigned))return assigned;
+ return Date.parse(`${shift.date||'1970-01-01'}T00:00:00Z`);
+}
+export function sortJobsByTime(left: Shift, right: Shift) { return jobTimeValue(left)-jobTimeValue(right)||String(left.id).localeCompare(String(right.id)); }
 export function localToISO(date: string, time: string, timezone = TIME_ZONE): string {
   const target = Date.parse(date + 'T' + time + ':00Z');
   let guess = target;

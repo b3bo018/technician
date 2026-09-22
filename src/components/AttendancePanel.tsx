@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AlertCircle, BriefcaseBusiness, CheckCircle2, ChevronDown, Clock3, MapPin, MessageCircle, Navigation, Pencil, Phone, Trash2, Wrench } from 'lucide-react';
 import { Attendance, Installation, PendingOperation, Shift, completionActor, jobLabel, jobReference } from '../types';
-import { attendanceStatus, displayTime } from '../lib/domain';
+import { attendanceStatus, displayTime, sortJobsByTime } from '../lib/domain';
 import { captureLocation } from '../lib/location';
 import { checkIn } from '../lib/data';
 import { safeMaps } from './ScheduleForm';
@@ -12,7 +12,7 @@ export function AttendancePanel({shifts,attendance,installations=[],save,onEdit,
  const [busy,setBusy]=useState('');const [error,setError]=useState('');const [notice,setNotice]=useState('');const [completing,setCompleting]=useState('');const [adminCompleting,setAdminCompleting]=useState('');const [adminReason,setAdminReason]=useState('');const [details,setDetails]=useState('');const [selected,setSelected]=useState<Shift|null>(null);
  async function arrive(shift:Shift){setBusy(shift.id);setError('');setNotice('');try{const coords=await captureLocation();await checkIn(shift,coords);setNotice('Arrival confirmed with current time and location.')}catch(e:any){setError(e.message)}finally{setBusy('')}}
  async function completeAsAdmin(shift:Shift){if(!onAdminComplete)return;setBusy(shift.id);setError('');setNotice('');try{await onAdminComplete(shift,adminReason);setAdminCompleting('');setAdminReason('');setNotice('Job marked completed by administrator. No IMEI, SIM or inventory deduction was recorded.')}catch(e:any){setError(e.message)}finally{setBusy('')}}
- const ordered=[...shifts].sort((left,right)=>Date.parse(left.scheduled_at)-Date.parse(right.scheduled_at)||left.id.localeCompare(right.id));
+ const ordered=[...shifts].sort(sortJobsByTime);
  const visible=admin?ordered:ordered.filter(s=>!installations.some(item=>item.shift_id===s.id||item.id===s.id));
  return <section className="panel schedule-panel"><div className="section-title"><div className="icon-box"><BriefcaseBusiness/></div><div><h2>{admin?'Assigned jobs & attendance':'Your field schedule'}</h2><p>{admin?'Monitor assignments, arrivals and completed work.':'Everything you need for each assigned customer visit.'}</p></div></div>{error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}{!visible.length&&<div className="empty"><MapPin/><h3>{!admin&&shifts.length?'All jobs completed':'No jobs scheduled'}</h3><p>{admin?'Create an assignment to get started.':shifts.length?'Completed work is available in the Completed section.':'Your administrator will assign jobs here.'}</p></div>}
  <div className="schedule-list">{visible.map(s=>{const a=attendance.find(x=>x.id===s.id);const done=installations.find(x=>x.shift_id===s.id||x.id===s.id);const status=attendanceStatus(s,a,now);const inWindow=now>=Date.parse(s.window_start)&&now<Date.parse(s.window_end);return <article className={'schedule-card '+(done?'completed':'')} key={s.id}><div className="schedule-head"><div><small>{jobReference(s)} · {new Date(s.date+'T12:00:00Z').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})}{admin&&' · '+s.technician_name}</small><h3>{s.company_name||s.customer_name||s.site_name}</h3></div><span className={'badge '+(done?'good':status.timing==='On time'?'good':['Late','Missing'].includes(status.timing)?'warning':'')}>{done?'Completed':status.timing}</span></div>

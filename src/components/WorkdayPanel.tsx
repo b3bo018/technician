@@ -3,9 +3,9 @@ import { Coffee, LogIn, LogOut, MapPin } from 'lucide-react';
 import { Technician, WorkBreak, WorkSession } from '../types';
 import { clockInWorkday, clockOutWorkday, endWorkBreak, startWorkBreak } from '../lib/data';
 import { captureLocation } from '../lib/location';
-import { dayKey, displayTime, TIME_ZONE } from '../lib/domain';
+import { dayKey, displayTime, displayTimeOnly, TIME_ZONE } from '../lib/domain';
 
-const timeOnly=(value:string)=>displayTime(value).slice(-5);
+const timeOnly=(value:string)=>displayTimeOnly(value);
 export function WorkdayPanel({profile,sessions,breaks,now,onError}:{profile:Technician;sessions:WorkSession[];breaks:WorkBreak[];now:number;onError:(message:string)=>void}){
  const [busy,setBusy]=useState(false);const date=dayKey(new Date(now));const session=sessions.find(item=>item.date===date);const ownBreaks=breaks.filter(item=>item.session_id===session?.id);const activeBreak=ownBreaks.find(item=>item.status==='active');
  const localHour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:TIME_ZONE,hour:'2-digit',hourCycle:'h23'}).format(new Date(now)));const late=!session&&localHour>=9;
