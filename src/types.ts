@@ -1,4 +1,4 @@
-export const DEVICE_MODELS = ['FMC920', 'FMC130', 'FMC125', 'Jimi VL03', 'GT06', 'Ruptela'] as const;
+export const DEVICE_MODELS = ['FMC920', 'FMC130', 'FMC125', 'FMM130', 'FMM125', 'Jimi VL03', 'GT06', 'GT06N', 'LV02', 'Ruptela'] as const;
 export type DeviceModel = typeof DEVICE_MODELS[number];
 export const SIM_PROVIDERS = ['Etisalat', 'du', 'International'] as const;
 export type SimProvider = typeof SIM_PROVIDERS[number];
@@ -14,7 +14,7 @@ export type JobType = typeof JOB_TYPES[number];
 export type JobStatus = 'assigned' | 'in_progress' | 'completed';
 export type InspectionAction = 'check_only' | 'device_change' | 'sim_change' | 'sim_device_change';
 export type Stock = Record<DeviceModel | SimStockKey, number>;
-export const emptyStock = (): Stock => ({ FMC920: 0, FMC130: 0, FMC125: 0, 'Jimi VL03': 0, GT06: 0, Ruptela: 0, 'SIM Etisalat': 0, 'SIM du': 0, 'SIM International': 0, SIM: 0 });
+export const emptyStock = (): Stock => ({ FMC920: 0, FMC130: 0, FMC125: 0, FMM130:0, FMM125:0, 'Jimi VL03': 0, GT06: 0, GT06N:0, LV02:0, Ruptela: 0, 'SIM Etisalat': 0, 'SIM du': 0, 'SIM International': 0, SIM: 0 });
 export interface Technician { uid: string; email: string; displayName?: string; photoDataUrl?: string; role: Role; status?: 'active' | 'deactivated'; inventory_breakdown?: { fmc920?: number; fmc130?: number; sim_cards?: number }; inventory_count?: number; }
 export interface Movement { id: string; technician_id: string; technician_name: string; type: 'received' | 'installed' | 'sim-used' | 'adjustment'; device_model: DeviceModel | ''; quantity: number; sim_count: number; quantity_delta?: number; sim_delta?: number; sim_provider?: SimProvider; timestamp: string; notes: string; }
 export interface UnitJob { vehicle_number: string; job_type: UnitJobType; }

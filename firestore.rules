@@ -10,7 +10,7 @@ service cloud.firestore {
   function master(){return role('master_admin');}
   function stockAdmin(){return active()&&profile().role in ['master_admin','admin','accountant'];}
   function assigner(){return active()&&profile().role in ['master_admin','admin'];}
-  function model(v){return v in ['FMC920','FMC130','FMC125','Jimi VL03','GT06','Ruptela'];}
+  function model(v){return v in ['FMC920','FMC130','FMC125','FMM130','FMM125','Jimi VL03','GT06','GT06N','LV02','Ruptela'];}
   function job(v){return v in ['new_installation','device_change','sim_change','sim_device_change','device_removal','inspection','mixed'];}
   function inspectionAction(v){return v in ['check_only','device_change','sim_change','sim_device_change'];}
   function simProvider(v){return v in ['Etisalat','du','International'];}
@@ -35,8 +35,8 @@ service cloud.firestore {
    allow delete: if master()&&uid!=request.auth.uid;
   }
   match /inventory_accounts/{uid} {
-   function legacyBalance(){let p=get(/databases/$(database)/documents/users/$(uid)).data;let b=p.get('inventory_breakdown',{});let total=p.get('inventory_count',0);return{'FMC920':b.get('fmc920',math.floor(total / 2)),'FMC130':b.get('fmc130',math.ceil(total / 2)),'FMC125':0,'Jimi VL03':0,'GT06':0,'Ruptela':0,'SIM Etisalat':0,'SIM du':0,'SIM International':0,'SIM':b.get('sim_cards',0)};}
-   function oldLegacyBalance(){let p=get(/databases/$(database)/documents/users/$(uid)).data;let b=p.get('inventory_breakdown',{});let total=p.get('inventory_count',0);return{'FMC920':b.get('fmc920',math.floor(total / 2)),'FMC130':b.get('fmc130',math.ceil(total / 2)),'FMC125':0,'Jimi VL03':0,'GT06':0,'Ruptela':0,'SIM':b.get('sim_cards',0)};}
+   function legacyBalance(){let p=get(/databases/$(database)/documents/users/$(uid)).data;let b=p.get('inventory_breakdown',{});let total=p.get('inventory_count',0);return{'FMC920':b.get('fmc920',math.floor(total / 2)),'FMC130':b.get('fmc130',math.ceil(total / 2)),'FMC125':0,'FMM130':0,'FMM125':0,'Jimi VL03':0,'GT06':0,'GT06N':0,'LV02':0,'Ruptela':0,'SIM Etisalat':0,'SIM du':0,'SIM International':0,'SIM':b.get('sim_cards',0)};}
+   function oldLegacyBalance(){let p=get(/databases/$(database)/documents/users/$(uid)).data;let b=p.get('inventory_breakdown',{});let total=p.get('inventory_count',0);return{'FMC920':b.get('fmc920',math.floor(total / 2)),'FMC130':b.get('fmc130',math.ceil(total / 2)),'FMC125':0,'FMM130':0,'FMM125':0,'Jimi VL03':0,'GT06':0,'GT06N':0,'LV02':0,'Ruptela':0,'SIM':b.get('sim_cards',0)};}
    allow read: if active()&&(owner(uid)||resource.data.technician_id==request.auth.uid||staff());
    allow create: if (owner(uid)||stockAdmin())&&active()&&request.resource.data.keys().hasOnly(['technician_id','opening','timestamp'])&&request.resource.data.technician_id==uid&&request.resource.data.timestamp==request.time&&(request.resource.data.opening==legacyBalance()||request.resource.data.opening==oldLegacyBalance());
    allow update: if false;

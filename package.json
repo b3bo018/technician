@@ -9,9 +9,16 @@
     "preview": "vite preview --host 127.0.0.1",
     "lint": "tsc --noEmit",
     "test": "tsx --test tests/domain.test.ts tests/excel.test.ts",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-securetrack \"tsx --test tests/rules.test.ts\""
+    "test:rules": "firebase emulators:exec --only firestore --project demo-securetrack \"tsx --test tests/rules.test.ts\"",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/camera": "^8.2.4",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/geolocation": "^8.2.2",
+    "@capacitor/local-notifications": "^8.3.1",
     "barcode-detector": "^3.2.2",
     "exceljs": "^4.4.0",
     "firebase": "^12.18.0",
@@ -21,6 +28,7 @@
     "react-dom": "^19.0.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
     "@firebase/rules-unit-testing": "^5.0.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/node": "^22.14.0",
