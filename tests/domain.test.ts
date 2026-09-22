@@ -12,7 +12,7 @@ test('SIM networks have separate balances while legacy SIM stock is preserved',(
 test('stock before baseline is unavailable; prior-day closing stock excludes later entries',()=>{assert.equal(stockAt(account,moves,'2026-08-31'),null);assert.deepEqual(stockAt(account,moves,'2026-09-11'),account.opening);});
 test('legacy profile totals preserve previous model split',()=>{assert.deepEqual(openingStock({uid:'x',email:'x',role:'technician',inventory_count:7}),{...emptyStock(),FMC920:3,FMC130:4});});
 test('Dubai 8am maps to 04:00 UTC and local date handles UTC rollover',()=>{assert.equal(localToISO('2026-09-12','08:00'),'2026-09-12T04:00:00.000Z');assert.equal(dayKey('2026-09-11T22:30:00Z'),'2026-09-12');});
-test('displayed time always uses 24-hour format',()=>{const shown=displayTime('2026-09-12T12:05:00Z');assert.match(shown,/16:05/);assert.doesNotMatch(shown,/AM|PM/i);});
+test('displayed time always uses 12-hour AM/PM format',()=>{const shown=displayTime('2026-09-12T12:05:00Z');assert.match(shown,/4:05 PM/);});
 test('weekly range uses Monday; month includes leap day',()=>{assert.deepEqual(periodRange('2026-09-13','weekly'),['2026-09-07','2026-09-13']);assert.deepEqual(periodRange('2028-02-12','monthly'),['2028-02-01','2028-02-29']);});
 test('arrival cutoff, grace, missing status and site distance',()=>{
  const a:any={id:shift.id,technician_id:'tech-a',latitude:25.2,longitude:55.3,accuracy_m:8,timestamp:'2026-09-12T04:00:00Z'};

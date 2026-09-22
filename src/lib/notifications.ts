@@ -1,9 +1,18 @@
-export type NotificationState='granted'|'denied'|'default'|'unsupported';
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
-export function notificationState():NotificationState{return typeof Notification==='undefined'?'unsupported':Notification.permission}
-export async function requestNotifications():Promise<NotificationState>{if(typeof Notification==='undefined')return'unsupported';return await Notification.requestPermission()}
+export type NotificationState='granted'|'denied'|'default'|'unsupported';
+const native=()=>Capacitor.isNativePlatform();
+const notificationId=(tag:string)=>{let hash=0;for(const char of tag)hash=((hash<<5)-hash)+char.charCodeAt(0)|0;return Math.abs(hash)||1}
+
+export function notificationState():NotificationState{return native()?'default':typeof Notification==='undefined'?'unsupported':Notification.permission}
+export async function requestNotifications():Promise<NotificationState>{
+ if(native()){const result=await LocalNotifications.requestPermissions();return result.display==='granted'?'granted':result.display==='denied'?'denied':'default'}
+ if(typeof Notification==='undefined')return'unsupported';return await Notification.requestPermission()
+}
 
 export async function sendAppNotification(title:string,body:string,tag:string){
+ if(native()){const permission=await LocalNotifications.checkPermissions();if(permission.display!=='granted')return false;await LocalNotifications.schedule({notifications:[{id:notificationId(tag),title,body,schedule:{at:new Date(Date.now()+500)}}]});return true}
  if(notificationState()!=='granted')return false;
  const options:NotificationOptions={body,tag,icon:'/icon-192.png',badge:'/icon-192.png',data:{url:'/'}};
  try{if('serviceWorker'in navigator){const registration=await navigator.serviceWorker.ready;await registration.showNotification(title,options);return true}new Notification(title,options);return true}catch{return false}

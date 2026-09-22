@@ -4,9 +4,9 @@ export function dayKey(value: string | Date, timezone = TIME_ZONE): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
 }
 export function displayTime(value: string, timezone = TIME_ZONE) {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23' }).formatToParts(new Date(value));
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year:'numeric', month:'2-digit', day:'2-digit', hour:'numeric', minute:'2-digit', hour12:true }).formatToParts(new Date(value));
   const p = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}`;
+  return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute} ${String(p.dayPeriod||'').toUpperCase()}`;
 }
 export function localToISO(date: string, time: string, timezone = TIME_ZONE): string {
   const target = Date.parse(date + 'T' + time + ':00Z');
