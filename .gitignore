@@ -12,5 +12,6 @@ coverage/
 signing-key-info.txt
 deliverables/
 .tools/
+.android-sdk/
 
 native-android/.gradle/
