@@ -18,7 +18,7 @@ import { useTechnicianNotifications } from './hooks/useTechnicianNotifications';
 import { useOperationsAlerts } from './hooks/useOperationsAlerts';
 type Tab = 'overview' | 'inventory' | 'installations' | 'attendance' | 'settings' | 'admin';
 export default function App() {
- const [user,setUser] = useState<User|null>(null); const [ready,setReady] = useState(false); const [profile,setProfile] = useState<Technician|null>(null);
+ const [user,setUser] = useState<User|null>(null); const [ready,setReady] = useState(false); const [bootDone,setBootDone] = useState(false); const [profile,setProfile] = useState<Technician|null>(null);
  const [tab,setTab] = useState<Tab>('overview'); const [online,setOnline] = useState(navigator.onLine); const [now,setNow] = useState(Date.now());
  const [installations,setInstallations] = useState<Installation[]>([]); const [legacy,setLegacy] = useState<Installation[]>([]); const [movements,setMovements] = useState<Movement[]>([]); const [accounts,setAccounts] = useState<InventoryAccount[]>([]); const [shifts,setShifts] = useState<Shift[]>([]); const [attendance,setAttendance] = useState<Attendance[]>([]); const [technicians,setTechnicians] = useState<Technician[]>([]);
  const [loginLogs,setLoginLogs]=useState<Attendance[]>([]);
@@ -29,6 +29,7 @@ export default function App() {
  const [mobileNavHidden,setMobileNavHidden]=useState(false);
  const isStaff = !!profile && profile.role !== 'technician';
  const adminNav=profile?[{id:'jobs' as AdminSection,label:'Job activity',icon:BriefcaseBusiness},...(['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'workforce' as AdminSection,label:'Shift attendance',icon:CalendarCheck},{id:'completed' as AdminSection,label:'Completed jobs',icon:ClipboardList}]:[]),...(['master_admin','admin'].includes(profile.role)?[{id:'assign' as AdminSection,label:'Add job',icon:CalendarPlus}]:[]),...(['master_admin','owner','admin','hr'].includes(profile.role)?[{id:'performance' as AdminSection,label:'Performance',icon:Gauge}]:[]),...(profile.role!=='hr'?[{id:'inventory' as AdminSection,label:'Inventory',icon:PackagePlus}]:[]),...(['master_admin','admin','accountant'].includes(profile.role)?[{id:'stock' as AdminSection,label:'Issue stock',icon:PackagePlus}]:[]),...(['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'reports' as AdminSection,label:'Reports',icon:BarChart3},{id:'settings' as AdminSection,label:'Alert settings',icon:SettingsIcon}]:[]),...(profile.role==='master_admin'?[{id:'people' as AdminSection,label:'People & roles',icon:Users}]:[])]:[];
+ useEffect(()=>{const timer=window.setTimeout(()=>setBootDone(true),1400);return()=>window.clearTimeout(timer)},[]);
  useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setProfile(null);setReady(true);setError('');}),[]);
  useEffect(()=>{if(profile)setAdminSection('jobs')},[profile?.role]);
  useEffect(()=>{const update=()=>setOnline(navigator.onLine);const timer=setInterval(()=>setNow(Date.now()),30000);const install=(e:Event)=>{e.preventDefault();setPrompt(e);};window.addEventListener('online',update);window.addEventListener('offline',update);window.addEventListener('beforeinstallprompt',install);return()=>{clearInterval(timer);window.removeEventListener('online',update);window.removeEventListener('offline',update);window.removeEventListener('beforeinstallprompt',install);};},[]);
@@ -85,7 +86,7 @@ export default function App() {
  const todayWorkSession=workSessions.find(s=>s.technician_id===user?.uid&&s.date===today);
  const completed=todayShifts.filter(s=>attendance.some(a=>a.id===s.id)).length;
  useTechnicianNotifications(profile,ownShifts,ownInstallations,ownMoves,workSessions,workBreaks,now);useOperationsAlerts(profile,technicians,accounts,movements,workSessions,stockAlerts,now);
- if(!ready)return <BootScreen/>;
+ if(!ready||!bootDone)return <BootScreen/>;
  if(!user)return <LoginScreen/>;
  if(!profile)return <BootScreen message={error||'Securing your field workspace…'}/>;
  if(profile.status==='deactivated')return <div className="loading"><h2>Account deactivated</h2><p>Contact your administrator.</p><button className="secondary" onClick={()=>signOut(auth)}>Sign out</button></div>;
