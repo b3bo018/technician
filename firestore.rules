@@ -32,7 +32,7 @@ service cloud.firestore {
    allow update: if (master()&&uid!=request.auth.uid&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','status','photoDataUrl'])
     &&request.resource.data.role in ['admin','manager','accountant','hr','it','technician']&&request.resource.data.get('status','active') in ['active','deactivated']&&validPhoto(request.resource.data))
     ||(owner(uid)&&active()&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','photoDataUrl'])&&request.resource.data.displayName is string&&request.resource.data.displayName.size()<=160&&validPhoto(request.resource.data));
-   allow delete: if uid!=request.auth.uid&&(master()||(role('admin')&&resource.data.role not in ['master_admin','owner']));
+   allow delete: if uid!=request.auth.uid&&(master()||(role('admin')&&!(resource.data.role in ['master_admin','owner'])));
   }
   match /settings/{id} {
    allow read: if active();
