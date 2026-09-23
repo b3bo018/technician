@@ -122,3 +122,5 @@ form{display:grid;gap:17px}label{display:flex;flex-direction:column;gap:7px;colo
   .schedule-card:hover{transform:translateY(-2px);border-color:rgba(38,122,71,.22);box-shadow:0 17px 34px rgba(21,71,42,.1)}
 }
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid rgba(42,137,82,.32);outline-offset:3px}
+
+.operations-exceptions .workforce-metrics small{display:block;margin-top:4px;color:#84938a;font-size:9px;line-height:1.35}.operations-exceptions .workforce-metrics>div{position:relative;overflow:hidden}.operations-exceptions .workforce-metrics>div:after{content:'';position:absolute;right:-12px;bottom:-18px;width:68px;height:68px;border-radius:50%;background:radial-gradient(circle,rgba(39,130,83,.12),transparent 68%)}
