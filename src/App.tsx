@@ -85,9 +85,9 @@ export default function App() {
  const todayWorkSession=workSessions.find(s=>s.technician_id===user?.uid&&s.date===today);
  const completed=todayShifts.filter(s=>attendance.some(a=>a.id===s.id)).length;
  useTechnicianNotifications(profile,ownShifts,ownInstallations,ownMoves,workSessions,workBreaks,now);useOperationsAlerts(profile,technicians,accounts,movements,workSessions,stockAlerts,now);
- if(!ready)return <div className="loading">Opening your workspace…</div>;
+ if(!ready)return <BootScreen/>;
  if(!user)return <LoginScreen/>;
- if(!profile)return <div className="loading"><h2>Loading your account</h2><p>{error||'Connecting to SecureTrack…'}</p><button className="secondary" onClick={()=>window.location.reload()}>Retry</button><button className="text-button" onClick={()=>signOut(auth)}>Sign out</button></div>;
+ if(!profile)return <BootScreen message={error||'Securing your field workspace…'}/>;
  if(profile.status==='deactivated')return <div className="loading"><h2>Account deactivated</h2><p>Contact your administrator.</p><button className="secondary" onClick={()=>signOut(auth)}>Sign out</button></div>;
  const sessionKey=user.uid+':'+user.metadata.lastSignInTime;
  const signedInName=(profile.displayName||profile.email.split('@')[0]).trim();
@@ -113,4 +113,5 @@ export default function App() {
  <footer className="workspace-footer"><span>SECURETRACK · FIELD OPERATIONS</span><span>Reporting timezone: {TIME_ZONE}</span></footer>
  </main></div></div>;
 }
+function BootScreen({message='Starting SecureTrack…'}:{message?:string}){return <div className="app-boot"><div className="boot-map"><i/><i/><i/></div><img src="/securetrack-logo.png" alt="SecureTrack"/><div className="boot-pin"><span/></div><strong>SECURETRACK</strong><small>{message}</small></div>}
 
