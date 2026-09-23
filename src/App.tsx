@@ -88,7 +88,7 @@ export default function App() {
  useTechnicianNotifications(profile,ownShifts,ownInstallations,ownMoves,workSessions,workBreaks,stockAlerts,now);useOperationsAlerts(profile,technicians,accounts,movements,workSessions,stockAlerts,now);
  if(!ready||!bootDone)return <BootScreen/>;
  if(!user)return <LoginScreen/>;
- if(!profile)return <BootScreen message={error||'Securing your field workspace…'}/>;
+ if(!profile)return <BootScreen/>;
  if(profile.status==='deactivated')return <div className="loading"><h2>Account deactivated</h2><p>Contact your administrator.</p><button className="secondary" onClick={()=>signOut(auth)}>Sign out</button></div>;
  const sessionKey=user.uid+':'+user.metadata.lastSignInTime;
  const signedInName=(profile.displayName||profile.email.split('@')[0]).trim();
@@ -115,4 +115,5 @@ export default function App() {
  </main></div></div>;
 }
 function BootScreen({message='Starting SecureTrack…'}:{message?:string}){return <div className="app-boot"><div className="boot-map"><i/><i/><i/></div><img src="/securetrack-logo.png" alt="SecureTrack"/><div className="boot-pin"><span/></div><strong>SECURETRACK</strong><small>{message}</small></div>}
+
 
