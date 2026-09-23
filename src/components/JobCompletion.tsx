@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useMemo, useRef, useState } from 'react';
+import { FormEvent, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, MapPin, QrCode, ScanBarcode } from 'lucide-react';
 import { BarcodeScanner, requestRearCamera } from './BarcodeScanner';
 import { DEVICE_MODELS, DeviceModel, InspectionAction, PendingOperation, Shift, SIM_PROVIDERS, SimProvider, UnitCompletion, UnitJobType, inspectionLabel, jobLabel } from '../types';
@@ -18,7 +18,6 @@ export function JobCompletion({shift,save,onDone}:{shift:Shift;save:(op:Omit<Pen
  const actionFor=(index:number)=>assigned[index].job_type==='inspection'?inspectionActions[index]:assigned[index].job_type;
  const anyDevice=assigned.some((_,index)=>deviceNeeded(actionFor(index)));const anySim=assigned.some((_,index)=>simNeeded(actionFor(index)));
  function openScanner(kind:'imei'|'sim',index:number){cameraRequest.current=requestRearCamera();setScan({kind,index})}
- const scanned=useCallback((value:string)=>{if(!scan)return;const next=clean(value);if(scan.kind==='imei')setImeis(v=>v.map((x,i)=>i===scan.index?next:x));else setSims(v=>v.map((x,i)=>i===scan.index?next:x));setScan(null)},[scan]);
  async function submit(e:FormEvent){e.preventDefault();setError('');try{
   const unitRecords:UnitCompletion[]=assigned.map((unit,index)=>{const action=actionFor(index);return{...unit,...(unit.job_type==='inspection'?{inspection_action:inspectionActions[index]}:{}),...(deviceNeeded(action)?{device_model:model,device_imei:clean(imeis[index])}:{}),...(simNeeded(action)?{sim_number:clean(sims[index])}:{})}});
   const di=unitRecords.map(row=>row.device_imei||'').filter(Boolean);const sn=unitRecords.map(row=>row.sim_number||'').filter(Boolean);
@@ -40,6 +39,6 @@ export function JobCompletion({shift,save,onDone}:{shift:Shift;save:(op:Omit<Pen
   </div>})}</div>
   <label>Completion notes {assigned.some((unit,index)=>unit.job_type==='inspection'&&inspectionActions[index]==='check_only')?<span className="required">required</span>:<span className="optional">optional</span>}<textarea required={assigned.some((unit,index)=>unit.job_type==='inspection'&&inspectionActions[index]==='check_only')} rows={3} maxLength={1000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Work completed, inspection result, or site notes"/></label>
   <div className="notice info"><MapPin/>One completion time and location are recorded for this site.</div>{error&&<div className="notice error" role="alert">{error}</div>}<div className="form-footer"><small>{inventoryText(assigned.map((_,index)=>actionFor(index)))}</small><button className="primary" disabled={busy}>{busy?'Getting location & saving…':'Confirm job completion'}</button></div>
-  {scan&&cameraRequest.current&&<BarcodeScanner cameraRequest={cameraRequest.current} label={scan.kind==='imei'?'device QR / IMEI':'SIM barcode'} onScan={scanned} onClose={()=>setScan(null)}/>}</form>
+  {scan&&cameraRequest.current&&<BarcodeScanner key={`${scan.kind}-${scan.index}`} cameraRequest={cameraRequest.current} label={scan.kind==='imei'?'device QR / IMEI':'SIM barcode'} onScan={value=>{const next=clean(value);if(scan.kind==='imei')setImeis(values=>values.map((item,index)=>index===scan.index?next:item));else setSims(values=>values.map((item,index)=>index===scan.index?next:item));setScan(null)}} onClose={()=>setScan(null)}/>}</form>
 }
 function inventoryText(actions:string[]){const devices=actions.filter(deviceNeeded).length;const sims=actions.filter(simNeeded).length;return devices||sims?`Inventory deduction: ${devices} device${devices===1?'':'s'} and ${sims} SIM${sims===1?'':'s'}.`:'No inventory is deducted for removals or check-only inspections.'}
