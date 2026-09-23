@@ -8,6 +8,10 @@ const notificationId=(tag:string)=>{let hash=0;for(const char of tag)hash=((hash
 export function notificationsMuted(){return localStorage.getItem('securetrack:notifications-muted')==='1'}
 export function setNotificationsMuted(value:boolean){localStorage.setItem('securetrack:notifications-muted',value?'1':'0')}
 export function notificationState():NotificationState{return native()?'default':typeof Notification==='undefined'?'unsupported':Notification.permission}
+export async function readNotificationState():Promise<NotificationState>{
+ if(native()){const result=await LocalNotifications.checkPermissions();return result.display==='granted'?'granted':result.display==='denied'?'denied':'default'}
+ return notificationState()
+}
 export async function requestNotifications():Promise<NotificationState>{
  if(native()){const result=await LocalNotifications.requestPermissions();return result.display==='granted'?'granted':result.display==='denied'?'denied':'default'}
  if(typeof Notification==='undefined')return'unsupported';return await Notification.requestPermission()
