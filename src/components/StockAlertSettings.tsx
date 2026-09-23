@@ -3,8 +3,9 @@ import { Bell, Check, Package, Pencil, Radio, Save, UsersRound } from 'lucide-re
 import { StockAlertSettings } from '../types';
 type AlertArea='device'|'sim'|'technician';
 const clock=(value:string)=>{const [hour,minute]=value.split(':').map(Number);const suffix=hour>=12?'PM':'AM';return `${String((hour%12)||12).padStart(2,'0')}:${String(minute).padStart(2,'0')} ${suffix}`};
-export function StockAlertSettingsPanel({settings,canEdit,onSave}:{settings:StockAlertSettings;canEdit:boolean;onSave:(settings:StockAlertSettings)=>Promise<void>}){
+export function StockAlertSettingsPanel({settings,canEditStock,canEditTechnician,onSave}:{settings:StockAlertSettings;canEditStock:boolean;canEditTechnician:boolean;onSave:(settings:StockAlertSettings)=>Promise<void>}){
  const [draft,setDraft]=useState(settings);const [selected,setSelected]=useState<AlertArea>('device');const [editing,setEditing]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');useEffect(()=>setDraft(settings),[settings]);
+ const canEdit=selected==='technician'?canEditTechnician:canEditStock;
  const content={device:{title:'Device stock alerts',text:'Alert when a technician’s FMC, FMM, GT06, LV02, Jimi or Ruptela balance is running low.',save:'Save device alert'},sim:{title:'SIM stock alerts',text:'Alert when Etisalat, du or International SIM cards are running low for any technician.',save:'Save SIM alert'},technician:{title:'Technician alerts',text:'Set the working-time thresholds used for technician and HR late-work alerts.',save:'Save technician alerts'}}[selected];
  async function submit(e:FormEvent){e.preventDefault();setBusy(true);setError('');try{await onSave(draft);setEditing(false)}catch(err:any){setError(err.message)}finally{setBusy(false)}}
  const card=(area:AlertArea,Icon:any,title:string,description:string)=><button type="button" className={'alert-coverage-card '+(selected===area?'active':'')} onClick={()=>{setSelected(area);setEditing(false)}}><Icon/><div><strong>{title}</strong><span>{description}</span></div></button>;
