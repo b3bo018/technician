@@ -2,7 +2,7 @@ import { X } from 'lucide-react';
 import { Attendance, Installation, Shift, completionActor, inspectionLabel, jobLabel, jobReference } from '../types';
 import { displayTime, workDurationMinutes } from '../lib/domain';
 
-export function JobDetailModal({shift,installation,attendance,onClose}:{shift:Shift;installation?:Installation;attendance?:Attendance;onClose:()=>void}){
+export function JobDetailModal({shift,installation,attendance,onClose,onEdit}:{shift:Shift;installation?:Installation;attendance?:Attendance;onClose:()=>void;onEdit?:()=>void}){
  const status=installation?'Completed':attendance?'In progress':'Assigned';
  const duration=installation&&attendance?workDurationMinutes(shift,attendance,installation):0;
  const row=(label:string,value:React.ReactNode)=><div><span>{label}</span><strong>{value||'—'}</strong></div>;
@@ -18,5 +18,5 @@ export function JobDetailModal({shift,installation,attendance,onClose}:{shift:Sh
   {row('Completion location',installation?.completion_latitude!=null?<a target="_blank" rel="noreferrer" href={`https://www.google.com/maps?q=${installation.completion_latitude},${installation.completion_longitude}`}>Open map · ±{Math.round(installation.completion_accuracy_m||0)} m</a>:'—')}
   {installation?.unit_records?.map((unit,index)=><div className="detail-wide unit-detail-record" key={index}><span>Unit {index+1} · {unit.vehicle_number}</span><strong>{jobLabel(unit.job_type)}{unit.inspection_action?` · ${inspectionLabel(unit.inspection_action)}`:''}{unit.device_model?` · ${unit.device_model}`:''}{unit.device_imei?` · IMEI ${unit.device_imei}`:''}{unit.sim_number?` · SIM ${unit.sim_number}`:''}</strong></div>)}
   <div className="detail-wide"><span>Job instructions</span><strong>{shift.job_notes||'—'}</strong></div><div className="detail-wide"><span>Completion notes</span><strong>{installation?.notes||'—'}</strong></div>
- </div></section></div>
+ </div>{onEdit&&<div className="form-footer"><button className="primary" onClick={onEdit}>Edit completed job</button></div>}</section></div>
 }

@@ -1,7 +1,7 @@
 import { LoginLocation } from './components/LoginLocation';
 import { useCallback, useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { BarChart3, BriefcaseBusiness, CalendarCheck, CalendarPlus, ClipboardList, Gauge, LayoutDashboard, LogOut, MapPin, Package, PackagePlus, RefreshCw, Settings as SettingsIcon, Users, Wifi, WifiOff, Wrench } from 'lucide-react';
+import { BarChart3, BriefcaseBusiness, CalendarCheck, CalendarPlus, ClipboardList, FilePenLine, Gauge, LayoutDashboard, LogOut, MapPin, Package, PackagePlus, RefreshCw, Settings as SettingsIcon, Users, Wifi, WifiOff, Wrench } from 'lucide-react';
 import { auth } from './lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, PendingOperation, Shift, StockAlertSettings, Technician, WorkBreak, WorkSession, roleLabel } from './types';
@@ -15,10 +15,12 @@ import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import { ProfileSettings } from './components/ProfileSettings';
 import { WorkdayPanel } from './components/WorkdayPanel';
 import { TechnicianHistory } from './components/TechnicianHistory';
+import { PublicAgreement } from './components/AgreementsWorkspace';
 import { useTechnicianNotifications } from './hooks/useTechnicianNotifications';
 import { useOperationsAlerts } from './hooks/useOperationsAlerts';
 type Tab = 'overview' | 'inventory' | 'installations' | 'attendance' | 'settings' | 'admin';
 export default function App() {
+ const agreementToken=location.pathname.match(/^\/agreement\/([a-zA-Z0-9]+)$/)?.[1];
  const [user,setUser] = useState<User|null>(null); const [ready,setReady] = useState(false); const [bootDone,setBootDone] = useState(false); const [profile,setProfile] = useState<Technician|null>(null);
  const [tab,setTab] = useState<Tab>('overview'); const [online,setOnline] = useState(navigator.onLine); const [now,setNow] = useState(Date.now());
  const [installations,setInstallations] = useState<Installation[]>([]); const [legacy,setLegacy] = useState<Installation[]>([]); const [movements,setMovements] = useState<Movement[]>([]); const [accounts,setAccounts] = useState<InventoryAccount[]>([]); const [shifts,setShifts] = useState<Shift[]>([]); const [attendance,setAttendance] = useState<Attendance[]>([]); const [technicians,setTechnicians] = useState<Technician[]>([]);
@@ -30,6 +32,8 @@ export default function App() {
  const [mobileNavHidden,setMobileNavHidden]=useState(false);
  const isStaff = !!profile && profile.role !== 'technician'; const platformClass=Capacitor.getPlatform()==='android'?'platform-android':'platform-web';
  const adminNav=profile?[{id:'jobs' as AdminSection,label:'Job activity',icon:BriefcaseBusiness},...(['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'workforce' as AdminSection,label:'Shift attendance',icon:CalendarCheck},{id:'completed' as AdminSection,label:'Completed jobs',icon:ClipboardList}]:[]),...(['master_admin','admin'].includes(profile.role)?[{id:'assign' as AdminSection,label:'Add job',icon:CalendarPlus}]:[]),...(['master_admin','owner','admin','hr'].includes(profile.role)?[{id:'performance' as AdminSection,label:'Performance',icon:Gauge}]:[]),...(profile.role!=='hr'?[{id:'inventory' as AdminSection,label:'Inventory',icon:PackagePlus}]:[]),...(['master_admin','admin','accountant'].includes(profile.role)?[{id:'stock' as AdminSection,label:'Issue stock',icon:PackagePlus}]:[]),...(['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'reports' as AdminSection,label:'Reports',icon:BarChart3},{id:'settings' as AdminSection,label:'Settings',icon:SettingsIcon}]:[]),...(['master_admin','admin'].includes(profile.role)?[{id:'people' as AdminSection,label:'People & roles',icon:Users}]:[])]:[];
+ const renderedAdminNav=profile&&['master_admin','owner','admin','accountant','hr'].includes(profile.role)?[adminNav[0],{id:'agreements' as AdminSection,label:'Agreements',icon:FilePenLine},...adminNav.slice(1)]:adminNav;
+ if(renderedAdminNav!==adminNav){adminNav.splice(0,adminNav.length,...renderedAdminNav)}
  useEffect(()=>{const timer=window.setTimeout(()=>setBootDone(true),1400);return()=>window.clearTimeout(timer)},[]);
  useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setProfile(null);setReady(true);setError('');}),[]);
  useEffect(()=>{if(profile)setAdminSection('jobs')},[profile?.role]);
@@ -87,6 +91,7 @@ export default function App() {
  const todayWorkSession=workSessions.find(s=>s.technician_id===user?.uid&&s.date===today);
  const completed=todayShifts.filter(s=>attendance.some(a=>a.id===s.id)).length;
  useTechnicianNotifications(profile,ownShifts,ownInstallations,ownMoves,workSessions,workBreaks,stockAlerts,now);useOperationsAlerts(profile,technicians,accounts,movements,workSessions,allInstallations,stockAlerts,now);
+ if(agreementToken)return <PublicAgreement token={agreementToken}/>;
  if(!ready||!bootDone)return <BootScreen/>;
  if(!user)return <LoginScreen/>;
  if(!profile)return <BootScreen/>;

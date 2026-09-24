@@ -110,6 +110,10 @@ export async function saveShift(shift: Omit<Shift, 'id'>) {
   await saveShifts([shift]);
 }
 export async function updateShift(id:string,shift:Omit<Shift,'id'>){
+ if(shift.status==='completed'){
+  await updateDoc(doc(db,'shifts',id),{site_name:shift.site_name,company_name:shift.company_name||shift.customer_name||'',customer_name:shift.customer_name||shift.company_name||'',contact_person:shift.contact_person||'',customer_phone:shift.customer_phone||'',maps_url:shift.maps_url||'',job_notes:shift.job_notes||'',payment_collection_required:!!shift.payment_collection_required,payment_amount:Number(shift.payment_amount||0),updated_at:serverTimestamp()});
+  return;
+ }
  const data={...shift,latitude:shift.latitude??deleteField(),longitude:shift.longitude??deleteField(),scheduled_at:Timestamp.fromDate(new Date(shift.scheduled_at)),window_start:Timestamp.fromDate(new Date(shift.window_start)),window_end:Timestamp.fromDate(new Date(shift.window_end)),updated_at:serverTimestamp()};
  await updateDoc(doc(db,'shifts',id),data);
 }
