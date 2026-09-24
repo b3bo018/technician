@@ -86,7 +86,7 @@ export default function App() {
  const today=dayKey(new Date(now)); const todayShifts=ownShifts.filter(s=>s.date===today);
  const todayWorkSession=workSessions.find(s=>s.technician_id===user?.uid&&s.date===today);
  const completed=todayShifts.filter(s=>attendance.some(a=>a.id===s.id)).length;
- useTechnicianNotifications(profile,ownShifts,ownInstallations,ownMoves,workSessions,workBreaks,stockAlerts,now);useOperationsAlerts(profile,technicians,accounts,movements,workSessions,stockAlerts,now);
+ useTechnicianNotifications(profile,ownShifts,ownInstallations,ownMoves,workSessions,workBreaks,stockAlerts,now);useOperationsAlerts(profile,technicians,accounts,movements,workSessions,allInstallations,stockAlerts,now);
  if(!ready||!bootDone)return <BootScreen/>;
  if(!user)return <LoginScreen/>;
  if(!profile)return <BootScreen/>;
