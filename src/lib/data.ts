@@ -94,7 +94,7 @@ export function syncOperations(user: Technician): Promise<void> {
       const op = (await pending(user.uid))[0];
       if (!op) break;
       let ready = op;
-      if(op.kind==='job-completed'&&op.job_type==='device_removal')ready={...op,unit_count:op.unit_count,device_model:'',device_imeis:[],sim_numbers:[],quantity:0,sim_count:0,sim_provider:undefined};
+      if(op.kind==='job-completed'&&op.job_type==='device_removal')ready={...op,unit_count:op.unit_count,device_model:'',quantity:0,sim_count:0,sim_provider:undefined};
       if (op.kind === 'job-completed' && ![op.completion_latitude, op.completion_longitude, op.completion_accuracy_m].every(Number.isFinite)) {
         const location = await captureLocation();
         ready = { ...op, completion_latitude: location.latitude, completion_longitude: location.longitude, completion_accuracy_m: location.accuracy_m };

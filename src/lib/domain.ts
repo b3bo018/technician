@@ -92,7 +92,7 @@ export function validateOperation(op: { kind: string; device_model: string; quan
     if (['new_installation','sim_device_change'].includes(op.job_type || '') && (!op.device_model || !op.device_imeis?.length || !op.sim_numbers?.length)) throw new Error('Scan or enter every device IMEI and SIM number.');
     if (op.job_type === 'device_change' && (!op.device_model || !op.device_imeis?.length)) throw new Error('Scan or enter every replacement device IMEI.');
     if (op.job_type === 'sim_change' && !op.sim_numbers?.length) throw new Error('Scan or enter every replacement SIM number.');
-    if (op.job_type === 'device_removal' && ((op.device_imeis?.length||0)>0||(op.sim_numbers?.length||0)>0)) throw new Error('Removal jobs do not require device or SIM scanning.');
+    if (op.job_type === 'device_removal' && (!(op.device_imeis?.length)||(op.sim_numbers?.length||0)>0)) throw new Error('Scan the removed device IMEI. Removal jobs do not require SIM scanning.');
     if (op.job_type === 'mixed' && !op.unit_records?.length) throw new Error('Complete the work record for every vehicle.');
     if (op.job_type === 'inspection') {
       if (!['check_only','device_change','sim_change','sim_device_change'].includes(op.inspection_action || '')) throw new Error('Choose the inspection result.');
