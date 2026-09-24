@@ -86,7 +86,7 @@ export function validateOperation(op: { kind: string; device_model: string; quan
   if (op.kind === 'sim-used' && (op.quantity !== 0 || op.sim_count < 1)) throw new Error('Enter the SIM quantity used.');
   if (op.kind === 'installed' && (op.quantity !== 1 || op.sim_count > 1 || !op.customer_ref.trim())) throw new Error('An installation requires one device and a customer reference, with zero or one SIM.');
   if (op.kind === 'job-completed') {
-    if (!op.shift_id || !['new_installation','device_change','sim_change','sim_device_change','device_removal','inspection','mixed'].includes(op.job_type || '')) throw new Error('This completion must belong to an assigned job.');
+    if (!op.shift_id || !['new_installation','device_change','sim_change','sim_device_change','device_removal','payment_collection','inspection','mixed'].includes(op.job_type || '')) throw new Error('This completion must belong to an assigned job.');
     if (!op.customer_ref.trim()) throw new Error('The assigned company is required.');
     if (![op.completion_latitude,op.completion_longitude,op.completion_accuracy_m].every(Number.isFinite)) throw new Error('Current location is required to complete this job.');
     if (['new_installation','sim_device_change'].includes(op.job_type || '') && (!op.device_model || !op.device_imeis?.length || !op.sim_numbers?.length)) throw new Error('Scan or enter every device IMEI and SIM number.');
