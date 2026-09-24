@@ -197,6 +197,14 @@ export async function clockOutWorkday(session:WorkSession,coords:{latitude:numbe
  if(!navigator.onLine)throw new Error('Connect to the internet to clock out. Work times use the server clock.');
  await updateDoc(doc(db,'work_sessions',session.id),{status:'clocked_out',clock_out_at:serverTimestamp(),clock_out_latitude:coords.latitude,clock_out_longitude:coords.longitude,clock_out_accuracy_m:coords.accuracy_m});
 }
+export async function correctWorkdayBreak(session:WorkSession,breakId:string,startTime:string,endTime:string,removeIds:string[]=[],reopen=false){
+ if(!navigator.onLine)throw new Error('Connect to the internet to save the attendance correction.');
+ const makeTime=(time:string)=>Timestamp.fromDate(new Date(`${session.date}T${time}:00+04:00`));
+ const batch=writeBatch(db);const breakRef=doc(db,'work_breaks',breakId);batch.update(breakRef,{status:'ended',started_at:makeTime(startTime),ended_at:makeTime(endTime)});
+ removeIds.filter(id=>id!==breakId).forEach(id=>batch.delete(doc(db,'work_breaks',id)));
+ if(reopen)batch.update(doc(db,'work_sessions',session.id),{status:'active',clock_out_at:deleteField(),clock_out_latitude:deleteField(),clock_out_longitude:deleteField(),clock_out_accuracy_m:deleteField()});
+ await batch.commit();
+}
 export async function resumeWorkday(session:WorkSession){
  if(!navigator.onLine)throw new Error('Connect to the internet to resume your workday.');
  await updateDoc(doc(db,'work_sessions',session.id),{status:'active',clock_out_at:deleteField(),clock_out_latitude:deleteField(),clock_out_longitude:deleteField(),clock_out_accuracy_m:deleteField()});
