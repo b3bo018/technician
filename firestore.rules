@@ -151,7 +151,8 @@ service cloud.firestore {
     &&request.resource.data.technician_id==request.auth.uid&&id==request.auth.uid+'_'+request.resource.data.date&&request.resource.data.technician_name is string&&request.resource.data.date is string&&request.resource.data.timezone=='Asia/Dubai'&&request.resource.data.status=='active'
     &&request.resource.data.clock_in_at==request.time&&request.resource.data.clock_in_latitude is number&&request.resource.data.clock_in_latitude>=-90&&request.resource.data.clock_in_latitude<=90&&request.resource.data.clock_in_longitude is number&&request.resource.data.clock_in_longitude>=-180&&request.resource.data.clock_in_longitude<=180&&request.resource.data.clock_in_accuracy_m is number&&request.resource.data.clock_in_accuracy_m>=0;
    allow update: if active()&&resource.data.technician_id==request.auth.uid&&resource.data.status=='active'&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','clock_out_at','clock_out_latitude','clock_out_longitude','clock_out_accuracy_m'])
-    &&request.resource.data.status=='clocked_out'&&request.resource.data.clock_out_at==request.time&&request.resource.data.clock_out_latitude is number&&request.resource.data.clock_out_latitude>=-90&&request.resource.data.clock_out_latitude<=90&&request.resource.data.clock_out_longitude is number&&request.resource.data.clock_out_longitude>=-180&&request.resource.data.clock_out_longitude<=180&&request.resource.data.clock_out_accuracy_m is number&&request.resource.data.clock_out_accuracy_m>=0;
+    &&request.resource.data.status=='clocked_out'&&request.resource.data.clock_out_at==request.time&&request.resource.data.clock_out_latitude is number&&request.resource.data.clock_out_latitude>=-90&&request.resource.data.clock_out_latitude<=90&&request.resource.data.clock_out_longitude is number&&request.resource.data.clock_out_longitude>=-180&&request.resource.data.clock_out_longitude<=180&&request.resource.data.clock_out_accuracy_m is number&&request.resource.data.clock_out_accuracy_m>=0
+    ||(active()&&resource.data.technician_id==request.auth.uid&&resource.data.status=='clocked_out'&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','clock_out_at','clock_out_latitude','clock_out_longitude','clock_out_accuracy_m'])&&request.resource.data.status=='active'&&!request.resource.data.keys().hasAny(['clock_out_at','clock_out_latitude','clock_out_longitude','clock_out_accuracy_m']));
    allow delete: if master();
   }
   match /work_breaks/{id} {
@@ -161,5 +162,5 @@ service cloud.firestore {
    allow update: if active()&&resource.data.technician_id==request.auth.uid&&resource.data.status=='active'&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','ended_at'])&&request.resource.data.status=='ended'&&request.resource.data.ended_at==request.time;
    allow delete: if master();
   }
- }
+  }
 }

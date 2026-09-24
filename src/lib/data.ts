@@ -197,6 +197,10 @@ export async function clockOutWorkday(session:WorkSession,coords:{latitude:numbe
  if(!navigator.onLine)throw new Error('Connect to the internet to clock out. Work times use the server clock.');
  await updateDoc(doc(db,'work_sessions',session.id),{status:'clocked_out',clock_out_at:serverTimestamp(),clock_out_latitude:coords.latitude,clock_out_longitude:coords.longitude,clock_out_accuracy_m:coords.accuracy_m});
 }
+export async function resumeWorkday(session:WorkSession){
+ if(!navigator.onLine)throw new Error('Connect to the internet to resume your workday.');
+ await updateDoc(doc(db,'work_sessions',session.id),{status:'active',clock_out_at:deleteField(),clock_out_latitude:deleteField(),clock_out_longitude:deleteField(),clock_out_accuracy_m:deleteField()});
+}
 export async function startWorkBreak(session:WorkSession){
  if(!navigator.onLine)throw new Error('Connect to the internet to start a break.');
  const ref=doc(collection(db,'work_breaks'));await setDoc(ref,{session_id:session.id,technician_id:session.technician_id,date:session.date,status:'active',started_at:serverTimestamp()});
