@@ -57,26 +57,27 @@ function revive(value:any):any{
 }
 function snap(ref:DocRef,row:any):SnapshotDoc{
  const exists=row!=null;const data=exists?revive(row.data??row):undefined;
- return{id:ref.id,ref,exists:()=>exists,data:()=>data,metadata:{hasPendingWrites:false}};
+ return{id:ref.id,ref,exists:()=>exists,data:()=>data,metadata:{hasPendingWrites:false},version:Number(row?.version||0)} as any;
 }
-export async function getDoc(ref:DocRef){return snap(ref,await request('/v1/store/doc/'+encode(ref.path)))}
+export async function getDoc(ref:DocRef){return snap(ref,await request('/documents/'+ref.path.split('/').map(encode).join('/')))}
 export async function getDocs(ref:CollectionRef|QueryRef){
  const collectionRef=ref.kind==='query'?ref.collection:ref;
  const filters=ref.kind==='query'?ref.filters:[];
- const result=await request('/v1/store/query',{method:'POST',body:JSON.stringify({collection:collectionRef.path,filters})});
- return{docs:(result?.rows||[]).map((row:any)=>snap(doc(collectionRef,row.id),row))};
+ const constraints=filters.map(filter=>({type:'where',...filter}));
+ const result=await request('/documents/query',{method:'POST',body:JSON.stringify({collection:collectionRef.path,constraints})});
+ return{docs:(result?.items||[]).map((row:any)=>snap(doc(collectionRef,row.id),row))};
 }
-export async function setDoc(ref:DocRef,data:any,options?:{merge?:boolean}){await request('/v1/store/doc/'+encode(ref.path),{method:'PUT',body:JSON.stringify({data,merge:!!options?.merge})})}
-export async function updateDoc(ref:DocRef,data:any){await request('/v1/store/doc/'+encode(ref.path),{method:'PATCH',body:JSON.stringify({data})})}
-export async function deleteDoc(ref:DocRef){await request('/v1/store/doc/'+encode(ref.path),{method:'DELETE'})}
-export async function addDoc(ref:CollectionRef,data:any){const result=await request('/v1/store/collection/'+encode(ref.path),{method:'POST',body:JSON.stringify({data})});return doc(ref,result.id)}
+export async function setDoc(ref:DocRef,data:any,options?:{merge?:boolean}){await request('/documents/'+ref.path.split('/').map(encode).join('/'),{method:'PUT',body:JSON.stringify({data,merge:!!options?.merge})})}
+export async function updateDoc(ref:DocRef,data:any){await request('/documents/'+ref.path.split('/').map(encode).join('/'),{method:'PATCH',body:JSON.stringify({data})})}
+export async function deleteDoc(ref:DocRef){await request('/documents/'+ref.path.split('/').map(encode).join('/'),{method:'DELETE'})}
+export async function addDoc(ref:CollectionRef,data:any){const created=doc(ref);await setDoc(created,data);return created}
 function batchFacade(){
  const ops:any[]=[];
  return{
   set:(ref:DocRef,data:any,options?:any)=>{ops.push({op:'set',path:ref.path,data,merge:!!options?.merge})},
   update:(ref:DocRef,data:any)=>{ops.push({op:'update',path:ref.path,data})},
   delete:(ref:DocRef)=>{ops.push({op:'delete',path:ref.path})},
-  commit:async()=>{await request('/v1/store/batch',{method:'POST',body:JSON.stringify({ops})})}
+  commit:async()=>{await request('/documents/batch',{method:'POST',body:JSON.stringify({writes:ops.map((op:any)=>{const parts=op.path.split('/');return{...op,collection:parts.slice(0,-1).join('/'),id:parts.at(-1)}})})})}
  };
 }
 export function writeBatch(_db:any){return batchFacade()}
@@ -91,7 +92,7 @@ function transactionFacade(reads:Map<string,SnapshotDoc>,ops:any[]){
 export async function runTransaction(_db:any,callback:(tx:Transaction)=>Promise<any>){
  // Server applies writes atomically and validates optimistic read versions.
  const reads=new Map<string,SnapshotDoc>(),ops:any[]=[];const tx=transactionFacade(reads,ops);const result=await callback(tx);
- await request('/v1/store/transaction',{method:'POST',body:JSON.stringify({reads:[...reads.keys()],ops})});return result;
+ await request('/documents/transaction',{method:'POST',body:JSON.stringify({reads:[...reads.entries()].map(([path,s]:any)=>({path,version:s.version||0})),writes:ops.map((op:any)=>{const parts=op.path.split('/');return{...op,collection:parts.slice(0,-1).join('/'),id:parts.at(-1)}})})});return result;
 }
 export function onSnapshot(ref:DocRef|CollectionRef|QueryRef,...args:any[]){
  const callback=args.find((a:any)=>typeof a==='function');const error=args.slice(args.indexOf(callback)+1).find((a:any)=>typeof a==='function');
