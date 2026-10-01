@@ -26,10 +26,12 @@ async function request(path:string,init:RequestInit={}){
 const encode=(value:string)=>encodeURIComponent(value);
 const normalize=(parts:string[])=>parts.filter(Boolean).join('/');
 export function collection(parent:any,...segments:string[]):CollectionRef{
+ if(typeof parent==='string')segments=[parent,...segments];
  const prefix=parent?.path?parent.path:'';
  return{kind:'collection',path:normalize([prefix,...segments])};
 }
 export function doc(parent:any,...segments:string[]):DocRef{
+ if(typeof parent==='string')segments=[parent,...segments];
  let path=parent?.path?normalize([parent.path,...segments]):normalize(segments);
  if(parent?.kind==='collection'&&segments.length===0)path=normalize([parent.path,crypto.randomUUID()]);
  const id=path.split('/').pop()||'';
