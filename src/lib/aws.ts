@@ -1,2 +1,3 @@
-export { auth } from './cloud/auth';
-export { db } from './cloud/store';
+import { auth } from './cloud/auth';
+export { auth };
+export const db={provider:'aws-api'} as const;
