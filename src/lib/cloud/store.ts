@@ -1,8 +1,11 @@
 // Firestore-compatible client facade backed by the SecureTrack AWS API.
 // Keeps existing application/domain code stable while Firebase is removed.
 export type DocRef={kind:'doc';path:string;id:string};
+export type DocumentReference=DocRef;
 export type CollectionRef={kind:'collection';path:string};
+export type CollectionReference=CollectionRef;
 export type QueryRef={kind:'query';collection:CollectionRef;filters:Filter[]};
+export type Query=QueryRef;
 type Filter={field:string;op:string;value:any};
 type Listener=()=>void;
 type SnapshotDoc={id:string;data:()=>any;exists:()=>boolean;metadata:{hasPendingWrites:false};ref:DocRef};
