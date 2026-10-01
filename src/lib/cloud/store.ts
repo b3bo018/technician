@@ -1,19 +1,97 @@
-import { getIdToken } from './auth';
-const API_BASE=(import.meta.env.VITE_API_URL||'/api').replace(/\/$/,''); export const db={kind:'securetrack-aws-store'} as const;
-type Constraint={type:string;field?:string;op?:string;value?:any;direction?:'asc'|'desc';count?:number;id?:string}; export type DocumentReference={kind:'doc';collection:string;id:string;path:string}; export type CollectionReference={kind:'collection';collection:string}; export type QueryReference={kind:'query';collection:string;constraints:Constraint[]};
-export class DocumentSnapshot<T=any>{readonly metadata={hasPendingWrites:false};constructor(public ref:DocumentReference,private value:T|undefined,readonly version=0){}get id(){return this.ref.id}exists(){return this.value!==undefined}data(){return this.value}}
-class QuerySnapshot<T=any>{constructor(public docs:DocumentSnapshot<T>[]){}}
-async function request(path:string,init:RequestInit={}){const response=await fetch(API_BASE+path,{...init,headers:{'content-type':'application/json',authorization:`Bearer ${await getIdToken()}`,...(init.headers||{})}});if(!response.ok){const body=await response.json().catch(()=>({}));const error:any=new Error(body.message||`SecureTrack API request failed (${response.status}).`);error.status=response.status;throw error}return response.status===204?null:response.json()}
-const randomId=()=>crypto.randomUUID().replace(/-/g,''); export function collection(_db:any,name:string):CollectionReference{return{kind:'collection',collection:name}}
-export function doc(parent:any,name?:string,id?:string):DocumentReference{if(parent?.kind==='collection'){const key=name||randomId();return{kind:'doc',collection:parent.collection,id:key,path:`${parent.collection}/${key}`}}if(!name)throw new Error('Document collection is required.');const key=id||randomId();return{kind:'doc',collection:name,id:key,path:`${name}/${key}`}}
-export function query(ref:CollectionReference|QueryReference,...constraints:Constraint[]):QueryReference{return{kind:'query',collection:ref.collection,constraints:[...('constraints'in ref?ref.constraints:[]),...constraints]}}
-export const where=(field:string,op:string,value:any):Constraint=>({type:'where',field,op,value});export const orderBy=(field:string,direction:'asc'|'desc'='asc'):Constraint=>({type:'orderBy',field,direction});export const limit=(count:number):Constraint=>({type:'limit',count});export const startAt=(value:any):Constraint=>({type:'startAt',value});export const endAt=(value:any):Constraint=>({type:'endAt',value});export const startAfter=(snapshot:DocumentSnapshot):Constraint=>({type:'startAfter',id:snapshot.id,value:snapshot.data()});
-export const serverTimestamp=()=>({__securetrackOp:'serverTimestamp'});export const deleteField=()=>({__securetrackOp:'deleteField'});export const arrayUnion=(...values:any[])=>({__securetrackOp:'arrayUnion',values});export const Timestamp={fromDate:(value:Date)=>value.toISOString()};
-export async function getDoc<T=any>(ref:DocumentReference){const row=await request(`/documents/${encodeURIComponent(ref.collection)}/${encodeURIComponent(ref.id)}`);return new DocumentSnapshot<T>(ref,row?.exists?row.data:undefined,row?.version||0)}export const getDocFromServer=getDoc;
-export async function getDocs<T=any>(ref:CollectionReference|QueryReference){const result=await request('/documents/query',{method:'POST',body:JSON.stringify({collection:ref.collection,constraints:'constraints'in ref?ref.constraints:[]})});return new QuerySnapshot<T>((result.items||[]).map((row:any)=>new DocumentSnapshot<T>(doc(db,ref.collection,row.id),row.data,row.version)))}
-export async function getCountFromServer(ref:CollectionReference|QueryReference){const snapshot=await getDocs(ref);return{data:()=>({count:snapshot.docs.length})}}
-export async function setDoc(ref:DocumentReference,data:any,options?:{merge?:boolean}){await request(`/documents/${encodeURIComponent(ref.collection)}/${encodeURIComponent(ref.id)}`,{method:'PUT',body:JSON.stringify({data,merge:!!options?.merge})})}export async function updateDoc(ref:DocumentReference,data:any){await request(`/documents/${encodeURIComponent(ref.collection)}/${encodeURIComponent(ref.id)}`,{method:'PATCH',body:JSON.stringify({data})})}export async function deleteDoc(ref:DocumentReference){await request(`/documents/${encodeURIComponent(ref.collection)}/${encodeURIComponent(ref.id)}`,{method:'DELETE'})}export async function addDoc(ref:CollectionReference,data:any){const target=doc(ref);await setDoc(target,data);return target}
-type Write={op:'set'|'update'|'delete';ref:DocumentReference;data?:any;merge?:boolean};export class WriteBatch{writes:Write[]=[];set(ref:DocumentReference,data:any,options?:{merge?:boolean}){this.writes.push({op:'set',ref,data,merge:!!options?.merge});return this}update(ref:DocumentReference,data:any){this.writes.push({op:'update',ref,data});return this}delete(ref:DocumentReference){this.writes.push({op:'delete',ref});return this}async commit(){if(this.writes.length)await request('/documents/batch',{method:'POST',body:JSON.stringify({writes:serializeWrites(this.writes)})})}}export function writeBatch(_db:any){return new WriteBatch()}
-export class Transaction extends WriteBatch{reads=new Map<string,number>();async get(ref:DocumentReference){const snap=await getDoc(ref);this.reads.set(ref.path,snap.version);return snap}}const serializeWrites=(writes:Write[])=>writes.map(item=>({op:item.op,collection:item.ref.collection,id:item.ref.id,data:item.data,merge:item.merge}));
-export async function runTransaction<T>(_db:any,callback:(tx:Transaction)=>Promise<T>){let last:any;for(let attempt=0;attempt<5;attempt++){const tx=new Transaction(),value=await callback(tx);try{await request('/documents/transaction',{method:'POST',body:JSON.stringify({reads:[...tx.reads].map(([path,version])=>({path,version})),writes:serializeWrites(tx.writes)})});return value}catch(error:any){last=error;if(error?.status!==409)throw error}}throw last||new Error('The record changed while you were editing it. Please retry.')}
-export function onSnapshot(ref:any,optionsOrNext:any,nextOrError?:any,maybeError?:any){const next=typeof optionsOrNext==='function'?optionsOrNext:nextOrError,error=typeof optionsOrNext==='function'?nextOrError:maybeError;let stopped=false,previous='';const load=async()=>{try{const snapshot=ref.kind==='doc'?await getDoc(ref):await getDocs(ref),current=JSON.stringify(ref.kind==='doc'?[snapshot.exists(),snapshot.data(),snapshot.version]:snapshot.docs.map((d:any)=>[d.id,d.data(),d.version]));if(!stopped&&current!==previous){previous=current;next(snapshot)}}catch(e:any){if(!stopped)error?.(e)}};void load();const timer=window.setInterval(load,5000),wake=()=>{if(!document.hidden)void load()};window.addEventListener('online',wake);document.addEventListener('visibilitychange',wake);return()=>{stopped=true;window.clearInterval(timer);window.removeEventListener('online',wake);document.removeEventListener('visibilitychange',wake)}}
+// Firestore-compatible client facade backed by the SecureTrack AWS API.
+// Keeps existing application/domain code stable while Firebase is removed.
+export type DocRef={kind:'doc';path:string;id:string};
+export type CollectionRef={kind:'collection';path:string};
+export type QueryRef={kind:'query';collection:CollectionRef;filters:Filter[]};
+type Filter={field:string;op:string;value:any};
+type Listener=()=>void;
+type SnapshotDoc={id:string;data:()=>any;exists:()=>boolean;metadata:{hasPendingWrites:false};ref:DocRef};
+export type Transaction=ReturnType<typeof transactionFacade>;
+export type WriteBatch=ReturnType<typeof batchFacade>;
+
+const API=(import.meta.env.VITE_API_URL||'').replace(/\/$/,'');
+let tokenProvider:()=>Promise<string|null>=async()=>null;
+export function setTokenProvider(provider:()=>Promise<string|null>){tokenProvider=provider}
+async function request(path:string,init:RequestInit={}){
+ const token=await tokenProvider();const headers=new Headers(init.headers);
+ if(init.body&&!headers.has('content-type'))headers.set('content-type','application/json');
+ if(token)headers.set('authorization','Bearer '+token);
+ const response=await fetch(API+path,{...init,headers});
+ if(!response.ok){const body=await response.json().catch(()=>({}));const error:any=new Error(body.message||('AWS API request failed ('+response.status+')'));error.code=body.code||String(response.status);throw error}
+ return response.status===204?null:response.json();
+}
+const encode=(value:string)=>encodeURIComponent(value);
+const normalize=(parts:string[])=>parts.filter(Boolean).join('/');
+export function collection(parent:any,...segments:string[]):CollectionRef{
+ const prefix=parent?.path?parent.path:'';
+ return{kind:'collection',path:normalize([prefix,...segments])};
+}
+export function doc(parent:any,...segments:string[]):DocRef{
+ let path=parent?.path?normalize([parent.path,...segments]):normalize(segments);
+ if(parent?.kind==='collection'&&segments.length===0)path=normalize([parent.path,crypto.randomUUID()]);
+ const id=path.split('/').pop()||'';
+ return{kind:'doc',path,id};
+}
+export function where(field:string,op:string,value:any):Filter{return{field,op,value}}
+export function query(ref:CollectionRef,...filters:Filter[]):QueryRef{return{kind:'query',collection:ref,filters}}
+export const serverTimestamp=()=>({__op:'serverTimestamp'});
+export const deleteField=()=>({__op:'deleteField'});
+export class Timestamp{
+ private value:Date;constructor(value:Date){this.value=value}
+ static fromDate(value:Date){return new Timestamp(value)}
+ toDate(){return this.value}
+ toJSON(){return this.value.toISOString()}
+}
+function revive(value:any):any{
+ if(Array.isArray(value))return value.map(revive);
+ if(value&&typeof value==='object'){
+  if(value.__timestamp)return new Timestamp(new Date(value.__timestamp));
+  return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,revive(v)]));
+ }
+ return value;
+}
+function snap(ref:DocRef,row:any):SnapshotDoc{
+ const exists=row!=null;const data=exists?revive(row.data??row):undefined;
+ return{id:ref.id,ref,exists:()=>exists,data:()=>data,metadata:{hasPendingWrites:false}};
+}
+export async function getDoc(ref:DocRef){return snap(ref,await request('/v1/store/doc/'+encode(ref.path)))}
+export async function getDocs(ref:CollectionRef|QueryRef){
+ const collectionRef=ref.kind==='query'?ref.collection:ref;
+ const filters=ref.kind==='query'?ref.filters:[];
+ const result=await request('/v1/store/query',{method:'POST',body:JSON.stringify({collection:collectionRef.path,filters})});
+ return{docs:(result?.rows||[]).map((row:any)=>snap(doc(collectionRef,row.id),row))};
+}
+export async function setDoc(ref:DocRef,data:any,options?:{merge?:boolean}){await request('/v1/store/doc/'+encode(ref.path),{method:'PUT',body:JSON.stringify({data,merge:!!options?.merge})})}
+export async function updateDoc(ref:DocRef,data:any){await request('/v1/store/doc/'+encode(ref.path),{method:'PATCH',body:JSON.stringify({data})})}
+export async function deleteDoc(ref:DocRef){await request('/v1/store/doc/'+encode(ref.path),{method:'DELETE'})}
+export async function addDoc(ref:CollectionRef,data:any){const result=await request('/v1/store/collection/'+encode(ref.path),{method:'POST',body:JSON.stringify({data})});return doc(ref,result.id)}
+function batchFacade(){
+ const ops:any[]=[];
+ return{
+  set:(ref:DocRef,data:any,options?:any)=>{ops.push({op:'set',path:ref.path,data,merge:!!options?.merge})},
+  update:(ref:DocRef,data:any)=>{ops.push({op:'update',path:ref.path,data})},
+  delete:(ref:DocRef)=>{ops.push({op:'delete',path:ref.path})},
+  commit:async()=>{await request('/v1/store/batch',{method:'POST',body:JSON.stringify({ops})})}
+ };
+}
+export function writeBatch(_db:any){return batchFacade()}
+function transactionFacade(reads:Map<string,SnapshotDoc>,ops:any[]){
+ return{
+  get:async(ref:DocRef)=>{if(reads.has(ref.path))return reads.get(ref.path)!;const s=await getDoc(ref);reads.set(ref.path,s);return s},
+  set:(ref:DocRef,data:any,options?:any)=>ops.push({op:'set',path:ref.path,data,merge:!!options?.merge}),
+  update:(ref:DocRef,data:any)=>ops.push({op:'update',path:ref.path,data}),
+  delete:(ref:DocRef)=>ops.push({op:'delete',path:ref.path})
+ };
+}
+export async function runTransaction(_db:any,callback:(tx:Transaction)=>Promise<any>){
+ // Server applies writes atomically and validates optimistic read versions.
+ const reads=new Map<string,SnapshotDoc>(),ops:any[]=[];const tx=transactionFacade(reads,ops);const result=await callback(tx);
+ await request('/v1/store/transaction',{method:'POST',body:JSON.stringify({reads:[...reads.keys()],ops})});return result;
+}
+export function onSnapshot(ref:DocRef|CollectionRef|QueryRef,...args:any[]){
+ const callback=args.find((a:any)=>typeof a==='function');const error=args.slice(args.indexOf(callback)+1).find((a:any)=>typeof a==='function');
+ let stopped=false,timer:number|undefined;
+ const load=async()=>{try{if(ref.kind==='doc')callback(await getDoc(ref));else callback(await getDocs(ref as any))}catch(e){error?.(e)}};
+ void load();timer=window.setInterval(()=>{if(!stopped)void load()},Number(import.meta.env.VITE_SYNC_INTERVAL_MS||5000));
+ return()=>{stopped=true;if(timer)window.clearInterval(timer)};
+}
