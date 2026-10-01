@@ -49,6 +49,9 @@ Do not test restoration against the live database.
 
 ## Common failures
 
+- **Arrival rejected for an office draft (fixed 1 October 2026):** a draft with a technician selected was previously displayed as a scheduled job. Drafts are now excluded from technician lists, counts, and reminders. In the administrator's Jobs view, choose **Schedule job**, complete the required fields, and **Schedule draft** to issue it. Arrival checks the current server assignment/state and preserves the first GPS/time on retries. Concurrent permission failures count as success only when the server confirms the same technician's arrival and started/completed job. No draft is automatically issued by this fix.
+- **Arrival regression coverage:** the full local rule suite passes 28/28 tests, including draft-to-assigned-to-arrived, concurrent requests, a second technician, unauthorized access, cancelled/completed/deleted/out-of-window jobs, and the older edit-after-arrival case. The domain/Excel suite passes 17/17. These automated results do not replace physical-device acceptance testing.
+
 - **Missing or insufficient permissions:** verify the signed-in user's active technician profile and role, then review Firestore rules. Do not broaden access globally.
 - **Stale screen after deployment:** close and reopen the tab once. The current release unregisters older service workers and clears their caches.
 - **Offline/database warning:** check network connectivity, Firebase status, and Settings → System status. Firestore local cache can display older data while offline.

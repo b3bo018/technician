@@ -62,6 +62,6 @@ Firebase Hosting enforces HTTPS, HSTS, a restrictive Content Security Policy, fr
 
 ## Android releases
 
-The current Capacitor Android package ID is `com.securetrack.fieldoperations` (version 1.2.7, version code 10). The older `native-android/` project is a legacy wrapper and is not the current APK build target.
+The current Capacitor Android package ID is `com.securetrack.fieldoperations` (version 1.2.8, version code 11). The older `native-android/` project is a legacy wrapper and is not the current APK build target.
 
 The private signing key and `android/securetrack-signing.properties` are deliberately excluded from Git. Obtain the existing signing setup from the owner's private backup before building a signed update. Future Android releases must reuse that key and increment the version code; do not generate a replacement key.

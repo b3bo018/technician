@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { AlertTriangle, CalendarPlus, CarFront, CheckCircle2, Clock3, Cpu, PackagePlus, Radio, UserRoundCheck, Wrench } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { dayKey, displayTime, TIME_ZONE } from '../lib/domain';
+import { dayKey, displayTime, isReleasedJob, TIME_ZONE } from '../lib/domain';
 import { notificationSeen, rememberNotification, sendAppNotification } from '../lib/notifications';
 import type { AdminSection } from './AdminDashboard';
 import { Installation, Role, Shift, SIM_STOCK_KEYS, Stock, StockAlertSettings, WorkSession, jobReference } from '../types';
@@ -11,7 +11,7 @@ const validTime=(value?:string)=>value&&Number.isFinite(Date.parse(value))?Date.
 const certLife=(row:any,today:string,soon=30)=>!row.expiry_date?'Active':row.expiry_date<today?'Expired':row.expiry_date<=new Date(Date.parse(today+'T12:00:00Z')+soon*86400000).toISOString().slice(0,10)?'Expiring Soon':'Active';
 export function AdminHome({role,currentUid,shifts,installations,sessions,stock,settings,now,onNavigate}:{role:Role;currentUid:string;shifts:Shift[];installations:Installation[];sessions:WorkSession[];stock:Stock;settings:StockAlertSettings;now:number;onNavigate:(section:AdminSection)=>void}){
  const [certificates,setCertificates]=useState<any[]>([]);useEffect(()=>onSnapshot(collection(db,'certificates'),snapshot=>setCertificates(snapshot.docs.map(item=>({id:item.id,...item.data()}))),()=>setCertificates([])),[]);
- const today=dayKey(new Date(now)),todayJobs=shifts.filter(item=>item.date===today),completedShift=(shift:Shift)=>shift.status==='completed'||(shift.completed_units||0)>=shift.unit_count;
+ const today=dayKey(new Date(now)),todayJobs=shifts.filter(item=>isReleasedJob(item)&&item.date===today),completedShift=(shift:Shift)=>shift.status==='completed'||(shift.completed_units||0)>=shift.unit_count;
  const completedJobs=todayJobs.filter(completedShift),pendingJobs=todayJobs.filter(item=>!completedShift(item)),carried=todayJobs.filter(item=>item.carried_forward&&!completedShift(item));
  const todayCompletions=installations.filter(item=>dayKey(item.completed_at||item.timestamp||'1970-01-01')===today),installCount=todayCompletions.filter(item=>['new_installation','device_change','sim_device_change'].includes(item.job_type||'')).length,removalCount=todayCompletions.filter(item=>item.job_type==='device_removal').length;
  const totalVehicles=todayJobs.reduce((sum,item)=>sum+item.unit_count,0),completedVehicles=todayJobs.reduce((sum,item)=>sum+Math.min(item.unit_count,item.status==='completed'?item.unit_count:item.completed_units||installations.filter(done=>done.shift_id===item.id&&done.unit_index!==undefined).length),0);

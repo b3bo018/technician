@@ -6,7 +6,7 @@ import { auth } from './lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, PendingOperation, Shift, StockAlertSettings, Technician, WorkBreak, WorkSession, roleLabel } from './types';
 import { carryForwardOverdueJobs, commitOperation, ensureInventory, ensureProfile, legacyQueueCount, mapAccount, mapAttendance, mapInstallation, mapMovement, mapShift, mapWorkBreak, mapWorkSession, observe, observeProfile, observeStockAlertSettings, pending, queueOperation, saveStockAlertThreshold, syncOperations } from './lib/data';
-import { TIME_ZONE, attendanceStatus, dayKey, displayTime, simTotal, sortJobsByTime, stockAt } from './lib/domain';
+import { TIME_ZONE, attendanceStatus, isReleasedJob, dayKey, displayTime, simTotal, sortJobsByTime, stockAt } from './lib/domain';
 import { LoginScreen } from './components/LoginScreen';
 import { StockGrid } from './components/StockGrid';
 import { AttendancePanel } from './components/AttendancePanel';
@@ -104,7 +104,7 @@ export default function App() {
  const ownInstallations=allInstallations.filter(i=>i.technician_id===user?.uid);
  const ownMoves=movements.filter(m=>m.technician_id===user?.uid).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
  const stock=stockAt(accounts.find(a=>a.technician_id===user?.uid),ownMoves);
- const ownShifts=shifts.filter(s=>s.technician_id===user?.uid).sort(sortJobsByTime);
+ const ownShifts=shifts.filter(s=>s.technician_id===user?.uid&&isReleasedJob(s)).sort(sortJobsByTime);
  const today=dayKey(new Date(now)); const todayShifts=ownShifts.filter(s=>s.date===today);
  const todayWorkSession=workSessions.find(s=>s.technician_id===user?.uid&&s.date===today);
  const completed=todayShifts.filter(s=>attendance.some(a=>a.id===s.id)).length;

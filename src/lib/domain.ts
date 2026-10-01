@@ -1,5 +1,7 @@
 import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, Shift, SimProvider, Stock, Technician, emptyStock, simStockKey, SIM_PROVIDERS, SIM_STOCK_KEYS } from '../types';
 import { saveDownload } from './download';
+// Drafts are office-only preparation; retain completed issued jobs for history/counters.
+export const isReleasedJob = (job: Pick<Shift,'status'|'is_deleted'>) => !job.is_deleted && ['assigned','in_progress','completed'].includes(job.status||'assigned');
 export const TIME_ZONE = import.meta.env?.VITE_BUSINESS_TIME_ZONE || 'Asia/Dubai';
 export function dayKey(value: string | Date, timezone = TIME_ZONE): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attendanceStatus, buildReport, csvCell, dayKey, displayTime, distanceMeters, jobPerformanceScore, localToISO, openingStock, overtimeMinutes, periodRange, stockAt, validateOperation, workDurationMinutes } from '../src/lib/domain';
+import { attendanceStatus, isReleasedJob, buildReport, csvCell, dayKey, displayTime, distanceMeters, jobPerformanceScore, localToISO, openingStock, overtimeMinutes, periodRange, stockAt, validateOperation, workDurationMinutes } from '../src/lib/domain';
 import { emptyStock } from '../src/types';
 const tech:any = { uid:'tech-a',email:'tech@example.test',displayName:'Aisha',role:'technician',inventory_breakdown:{fmc920:10,fmc130:4,sim_cards:20}};
 const account:any = {technician_id:'tech-a',opening:openingStock(tech),timestamp:'2026-09-01T00:00:00Z'};
@@ -51,3 +51,9 @@ test('performance score uses recorded duration against the job benchmark',()=>{c
 test('CSV quotes values, preserves numeric counts, and neutralizes formulas',()=>{assert.equal(csvCell('A,"B"'),'"A,""B"""');assert.equal(csvCell(12),'"12"');assert.equal(csvCell('=HYPERLINK("x")'),'"\'=HYPERLINK(""x"")"');});
 test('audited inventory corrections change only the selected balance',()=>{const account:any={technician_id:'tech-a',opening:{...emptyStock(),FMC920:5,'SIM du':4},timestamp:'2026-09-01T00:00:00Z'};const rows:any[]=[{id:'a',technician_id:'tech-a',type:'adjustment',device_model:'FMC920',quantity:0,sim_count:0,quantity_delta:-2,sim_delta:0,timestamp:'2026-09-12T08:00:00Z',notes:'Count'},{id:'b',technician_id:'tech-a',type:'adjustment',device_model:'',quantity:0,sim_count:0,quantity_delta:0,sim_delta:3,sim_provider:'du',timestamp:'2026-09-12T08:01:00Z',notes:'Count'}];const stock=stockAt(account,rows)!;assert.equal(stock.FMC920,3);assert.equal(stock['SIM du'],7)});
 
+
+test('only issued jobs enter technician lists, counts and reminders',()=>{
+ for(const status of ['draft','cancelled'])assert.equal(isReleasedJob({status} as any),false);
+ for(const status of ['assigned','in_progress','completed',undefined])assert.equal(isReleasedJob({status} as any),true);
+ assert.equal(isReleasedJob({status:'assigned',is_deleted:true}),false);
+});

@@ -7,6 +7,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import { Attendance, DEVICE_MODELS, emptyStock, Installation, InventoryAccount, Movement, PendingOperation, Role, SIM_PROVIDERS, SIM_STOCK_KEYS, Shift, simStockKey, Stock, StockAlertSettings, Technician, WorkBreak, WorkSession } from '../types';
 import { localToISO, nextDate, openingStock, stockAt, TIME_ZONE, validateOperation } from './domain';
 import { captureLocation } from './location';
+import { confirmJobArrival } from './arrival';
 import { addAuditToBatch, addAuditToTransaction, changedFields, type AuditActor } from './audit';
 
 export const iso = (v: any): string => typeof v === 'string' ? v : v?.toDate?.().toISOString() || new Date().toISOString();
@@ -150,7 +151,7 @@ export async function updateShift(id:string,shift:Omit<Shift,'id'>,actor?:AuditA
   const refs=[...new Map([oldLock,newLock].filter(Boolean).map(ref=>[ref!.path,ref!])).values()];const lockSnaps=await Promise.all(refs.map(ref=>tx.get(ref)));const locks=new Map(lockSnaps.map(s=>[s.ref.path,s]));
   const jobReference=String(current.job_reference||id),end=shift.expected_end_at||new Date(minutes(shift.scheduled_at)+(shift.duration_minutes||60)*60000).toISOString();
   if(newLock){const snap=locks.get(newLock.path),entries={...(snap?.data()?.entries||{})};assertAvailable(entries,{...lockEntry(id,{...shift,expected_end_at:end},jobReference)},id)}
-  const next:any={...shift,version:currentVersion+1,expected_end_at:Timestamp.fromDate(new Date(end)),latitude:shift.latitude??deleteField(),longitude:shift.longitude??deleteField(),scheduled_at:Timestamp.fromDate(new Date(shift.scheduled_at)),window_start:Timestamp.fromDate(new Date(shift.window_start)),window_end:Timestamp.fromDate(new Date(shift.window_end)),updated_at:serverTimestamp(),updated_by_uid:actor?.uid||'',updated_by_name:actor?.displayName||actor?.email||''};
+  const next:any={...shift,...(current.status==='draft'&&shift.status==='assigned'?{assigned_at:serverTimestamp()}:{}),version:currentVersion+1,expected_end_at:Timestamp.fromDate(new Date(end)),latitude:shift.latitude??deleteField(),longitude:shift.longitude??deleteField(),scheduled_at:Timestamp.fromDate(new Date(shift.scheduled_at)),window_start:Timestamp.fromDate(new Date(shift.window_start)),window_end:Timestamp.fromDate(new Date(shift.window_end)),updated_at:serverTimestamp(),updated_by_uid:actor?.uid||'',updated_by_name:actor?.displayName||actor?.email||''};
   tx.update(shiftRef,next);
   if(oldLock){const snap=locks.get(oldLock.path),entries={...(snap?.data()?.entries||{})};delete entries[id];tx.set(oldLock,{technician_id:current.technician_id,date:current.date,entries,updated_at:serverTimestamp()},{merge:true})}
   if(newLock){const snap=locks.get(newLock.path),entries={...(snap?.data()?.entries||{})};entries[id]=lockEntry(id,{...shift,expected_end_at:end},jobReference);tx.set(newLock,{technician_id:shift.technician_id,date:shift.date,entries,updated_at:serverTimestamp()},{merge:true})}
@@ -182,10 +183,7 @@ export async function adminCompleteJob(shift:Shift,actor:Technician,reason:strin
 }
 export async function checkIn(shift: Shift, coords: { latitude: number; longitude: number; accuracy_m: number }) {
   if (!navigator.onLine) throw new Error('Connect to the internet to confirm attendance. Attendance uses the server time.');
-  const batch=writeBatch(db);
-  batch.set(doc(db,'attendance_logs',shift.id),{technician_id:shift.technician_id,...coords,timestamp:serverTimestamp()});
-  batch.update(doc(db,'shifts',shift.id),{status:'in_progress',arrived_at:serverTimestamp()});
-  await batch.commit();
+  await confirmJobArrival(db,auth.currentUser?.uid||'',shift.id,coords);
 }
 export async function changeRole(uid: string, role: string,actor:AuditActor) {
   const ref=doc(db,'users',uid);await runTransaction(db,async tx=>{const current=await tx.get(ref);if(!current.exists())throw new Error('User account not found.');tx.update(ref,{role});addAuditToTransaction(tx,actor,'PERMISSION_CHANGED','Users',uid,{changes:changedFields(current.data(),{role},['role'])})});

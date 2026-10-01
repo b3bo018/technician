@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { confirmJobArrival } from '../src/lib/arrival';
 import test,{before,beforeEach,after}from'node:test';
 import{readFileSync}from'node:fs';
 import{initializeTestEnvironment,assertFails,assertSucceeds,RulesTestEnvironment}from'@firebase/rules-unit-testing';
@@ -37,3 +39,37 @@ test('complete audit is append only and visible only to master administrator',as
 test('renewal imports upsert one deterministic record and remain read only to managers',async()=>{const record={identity:'CHASSIS:VIN123',company_name:'ABC RENTALS',vehicle_number:'Z/12345',chassis_number:'VIN123',imei:'123',sim_number:'456',start_date:'2026-01-01',expiry_date:'2027-01-01',status:'Active',contact_number:'971500000000',email:'a@example.test',device_type:'FMC920',lifecycle:'Upcoming',is_deleted:false,updated_by_uid:'accountant',updated_by_name:'accountant',updated_at:serverTimestamp(),created_at:serverTimestamp(),created_by_uid:'accountant',created_by_name:'accountant'};await assertSucceeds(setDoc(doc(db('accountant'),'renewals','renewal_fixed'),record));await assertSucceeds(updateDoc(doc(db('accountant'),'renewals','renewal_fixed'),{expiry_date:'2027-02-01',updated_at:serverTimestamp()}));await assertSucceeds(getDoc(doc(db('manager'),'renewals','renewal_fixed')));await assertFails(updateDoc(doc(db('manager'),'renewals','renewal_fixed'),{expiry_date:'2028-01-01'}))});
 test('operations notification read state is stored per user',async()=>{const note={type:'vehicle_completed',company:'Acme',vehicle:'Dubai A 12345',job_id:'ST00001',imei:'123',sim:'456',technician_name:'tech-a',actor_uid:'tech-a',message:'Vehicle 1 of 2 completed',progress:'1 of 2',recipient_roles:['master_admin','admin'],target_section:'jobs',read_by:[],created_at:serverTimestamp()};await assertSucceeds(setDoc(doc(db(),'operational_notifications','note-a'),note));await assertSucceeds(updateDoc(doc(db('admin'),'operational_notifications','note-a'),{read_by:['admin']}));const snap=await assertSucceeds(getDoc(doc(db('master'),'operational_notifications','note-a')));if(snap.data()?.read_by.includes('master'))throw new Error('Master notification was incorrectly marked read.')});
 test('technician live stock and schedule locks are scoped to authorized users',async()=>{const stock={technician_id:'tech-a',balance:{FMC920:1},updated_at:serverTimestamp()};await assertSucceeds(setDoc(doc(db(),'technician_live_stock','tech-a'),stock));await assertFails(setDoc(doc(db('tech-b'),'technician_live_stock','tech-a'),stock));await assertSucceeds(setDoc(doc(db('admin'),'schedule_locks','tech-a_2026-09-30'),{technician_id:'tech-a',date:'2026-09-30',entries:{},updated_at:serverTimestamp()}));await assertFails(setDoc(doc(db('manager'),'schedule_locks','tech-a_2026-10-01'),{technician_id:'tech-a',date:'2026-10-01',entries:{},updated_at:serverTimestamp()}))});
+
+const gps={latitude:25.2,longitude:55.3,accuracy_m:10};
+test('draft must be scheduled before the actual arrival handler can save, and retries preserve GPS/time',async()=>{
+ const id='draft-arrival',d=db();
+ await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),'shifts',id),{...shift(),status:'draft',version:1,duration_minutes:60,expected_end_at:Timestamp.fromMillis(Date.now()+3660000)}));
+ await assert.rejects(confirmJobArrival(db() as any,'tech-a',id,gps),/draft/);
+ const illegal=writeBatch(d);illegal.set(doc(d,'attendance_logs',id),{technician_id:'tech-a',...gps,timestamp:serverTimestamp()});illegal.update(doc(d,'shifts',id),{status:'in_progress',arrived_at:serverTimestamp()});await assertFails(illegal.commit());
+ await assertFails(setDoc(doc(db(),'attendance_logs',id),{technician_id:'tech-a',...gps,timestamp:serverTimestamp()}));
+ assert.equal((await getDoc(doc(db(),'attendance_logs',id))).exists(),false);
+ await assertSucceeds(updateDoc(doc(db('admin'),'shifts',id),{status:'assigned',assigned_at:serverTimestamp(),version:2,updated_at:serverTimestamp(),updated_by_uid:'admin',updated_by_name:'admin'}));
+ await confirmJobArrival(db() as any,'tech-a',id,gps);
+ const before=(await getDoc(doc(db(),'attendance_logs',id))).data()!;
+ await confirmJobArrival(db() as any,'tech-a',id,{...gps,latitude:26});
+ const after=(await getDoc(doc(db(),'attendance_logs',id))).data()!;
+ assert.equal(after.timestamp.toMillis(),before.timestamp.toMillis());assert.equal(after.latitude,before.latitude);
+ assert.equal((await getDoc(doc(db(),'shifts',id))).data()?.status,'in_progress');
+});
+test('arrival handler is safe for concurrent retries and the second technician',async()=>{
+ const outcomes=await Promise.allSettled([confirmJobArrival(db() as any,'tech-a','job-install',gps),confirmJobArrival(db() as any,'tech-a','job-install',gps)]);for(const result of outcomes){if(result.status==='rejected')throw result.reason;}
+ await assertFails(confirmJobArrival(db('tech-b') as any,'tech-b','job-sim',gps));
+ await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),'shifts','second-arrival'),shift('tech-b')));
+ await confirmJobArrival(db('tech-b') as any,'tech-b','second-arrival',gps);
+ assert.equal((await getDoc(doc(db('tech-b'),'attendance_logs','second-arrival'))).data()?.technician_id,'tech-b');
+});
+test('arrival rejects cancelled, completed, deleted and out-of-window jobs',async()=>{
+ for(const status of ['cancelled','completed']){
+  await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),'shifts',status),{...shift(),status}));
+  await assert.rejects(confirmJobArrival(db() as any,'tech-a',status,gps),/no longer open/);
+  await assertFails(setDoc(doc(db(),'attendance_logs',status),{technician_id:'tech-a',...gps,timestamp:serverTimestamp()}));
+ }
+ await env.withSecurityRulesDisabled(async c=>{await setDoc(doc(c.firestore(),'shifts','deleted-arrival'),{...shift(),is_deleted:true});await setDoc(doc(c.firestore(),'shifts','future-arrival'),{...shift(),window_start:Timestamp.fromMillis(Date.now()+3600000),window_end:Timestamp.fromMillis(Date.now()+7200000)})});
+ await assert.rejects(confirmJobArrival(db() as any,'tech-a','deleted-arrival',gps),/no longer open/);
+ await assertFails(confirmJobArrival(db() as any,'tech-a','future-arrival',gps));
+});
