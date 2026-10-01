@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ExcelJS from 'exceljs';
-import { collection, doc, getCountFromServer, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, writeBatch, type DocumentSnapshot, where } from 'firebase/firestore';
+import { collection, doc, getCountFromServer, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, writeBatch, type DocumentSnapshot, where } from '../lib/cloud/store';
 import { Building2, ChevronLeft, ChevronRight, Download, Mail, MessageCircle, RotateCcw, Upload } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 import type { Technician } from '../types';
 import { addAuditToBatch, changedFields } from '../lib/audit';
 import { saveDownload } from '../lib/download';
