@@ -92,7 +92,7 @@ export default function App() {
     const retryable=code.includes('unavailable')||code.includes('deadline-exceeded')||code.includes('resource-exhausted')||/network|offline|quota exceeded/i.test(message);
     if(!retryable){setError('Completion needs attention: '+message);throw e}
     try{await queueOperation(operation);await refresh()}catch{throw new Error('This device cannot store another offline entry. Free some device storage, reopen SecureTrack, and try again.')}
-    const notice=/quota|resource-exhausted/i.test(code+' '+message)?'Firebase’s free cloud quota is temporarily exhausted. This completion is saved on this device; tap Sync now after the quota resets.':'The connection dropped while saving. This completion is saved on this device; tap Sync now when the connection is stable.';
+    const notice=/quota|resource-exhausted/i.test(code+' '+message)?'SecureTrack cloud service is temporarily unavailable. This completion is saved on this device; tap Sync now when the service is available.':'The connection dropped while saving. This completion is saved on this device; tap Sync now when the connection is stable.';
     setError(notice);throw new Error(notice)
    }
   }
