@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getDocFromServer, doc } from 'firebase/firestore';
+import { getDocFromServer, doc } from '../lib/cloud/store';
 import { CheckCircle2, RefreshCw, TriangleAlert } from 'lucide-react';
-import { auth, db } from '../lib/firebase';
+import { auth, db } from '../lib/aws';
 
 type Check={label:string;ok:boolean;detail:string};
 
