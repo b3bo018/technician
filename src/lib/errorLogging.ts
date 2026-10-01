@@ -1,5 +1,5 @@
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { addDoc, collection, serverTimestamp } from './cloud/store';
+import { auth, db } from './aws';
 
 const hidden=/password|token|secret|credential|authorization|cookie|api[-_]?key/i;
 
