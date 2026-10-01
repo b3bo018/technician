@@ -1,0 +1,20 @@
+import { useEffect, useMemo, useState } from 'react';
+import { arrayUnion, collection, doc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { Bell, CheckCheck, X } from 'lucide-react';
+import { db } from '../lib/firebase';
+import type { Technician } from '../types';
+import type { AdminSection } from './AdminDashboard';
+
+const title=(type:string)=>({vehicle_completed:'Vehicle completed',job_completed:'Job completed',job_created:'Job created',job_assigned:'Job assigned',job_reassigned:'Job reassigned',certificate_issued:'Certificate issued',certificate_updated:'Certificate updated',certificate_deleted:'Certificate deleted',certificate_restored:'Certificate restored',renewal_import_completed:'Renewal import completed',renewal_import_failed:'Renewal import failed'}[type]||String(type||'Operations update').replace(/_/g,' '));
+const target=(row:any):AdminSection=>row.target_section||((row.type||'').includes('certificate')?'certificates':(row.type||'').includes('renewal')?'control-center':'jobs');
+const sameDubaiDay=(value:any)=>{const date=value?.toDate?.();if(!date)return true;const key=(d:Date)=>d.toLocaleDateString('en-CA',{timeZone:'Asia/Dubai'});return key(date)===key(new Date())};
+
+export function NotificationCenter({profile,onNavigate}:{profile:Technician;onNavigate?:(section:AdminSection)=>void}){
+ const [rows,setRows]=useState<any[]>([]),[open,setOpen]=useState(false),[tab,setTab]=useState<'unread'|'all'>('unread'),[error,setError]=useState('');
+ useEffect(()=>onSnapshot(query(collection(db,'operational_notifications'),orderBy('created_at','desc'),limit(50)),snapshot=>{setRows(snapshot.docs.map(d=>({id:d.id,...d.data()})));setError('')},e=>{setRows([]);setError(e.message)}),[]);
+ const eligible=useMemo(()=>rows.filter(row=>{const uids=row.recipient_uids||[],roles=row.recipient_roles||[];return(!uids.length&&!roles.length)||uids.includes(profile.uid)||roles.includes(profile.role)}),[rows,profile.uid,profile.role]);
+ const unread=eligible.filter(row=>!(row.read_by||[]).includes(profile.uid)),visible=tab==='unread'?unread:eligible;
+ async function openItem(row:any){if(!(row.read_by||[]).includes(profile.uid))await updateDoc(doc(db,'operational_notifications',row.id),{read_by:arrayUnion(profile.uid)});setOpen(false);onNavigate?.(target(row))}
+ const group=(label:string,items:any[])=>items.length?<div className="notification-group"><span>{label}</span>{items.map(row=>{const isUnread=!(row.read_by||[]).includes(profile.uid);return <button className={isUnread?'notification-item unread':'notification-item'} key={row.id} onClick={()=>openItem(row)}><span><strong>{title(row.type)}</strong><b>{[row.vehicle,row.company].filter(Boolean).join(' · ')||row.job_id||'SecureTrack'}</b><small>{row.message}</small><small>{row.technician_name||row.actor_name||'System'} · {row.created_at?.toDate?.().toLocaleString('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'})||'Just now'}</small></span>{!isUnread&&<CheckCheck/>}</button>})}</div>:null;
+ return <div className="notification-center"><button className="icon-button" aria-label={`${unread.length} unread notifications`} onClick={()=>setOpen(!open)}><Bell/>{unread.length>0&&<span className="notification-count">{unread.length>99?'99+':unread.length}</span>}</button>{open&&<section className="notification-popover panel"><header><div><strong>Notification center</strong><small>Updates are saved separately for your account.</small></div><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></header><div className="notification-tabs"><button className={tab==='unread'?'active':''} onClick={()=>setTab('unread')}>Unread <span>{unread.length}</span></button><button className={tab==='all'?'active':''} onClick={()=>setTab('all')}>All</button></div>{error&&<div className="notice error">Notifications could not load. {error}</div>}{group('Today',visible.filter(sameDubaiDay))}{group('Earlier',visible.filter(row=>!sameDubaiDay(row)))}{!visible.length&&!error&&<div className="empty">{tab==='unread'?'You are all caught up.':'No operations notifications.'}</div>}</section>}</div>
+}

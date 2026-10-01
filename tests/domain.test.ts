@@ -35,12 +35,12 @@ test('report includes models, closing stock, no-SIM installs and every assigned 
  assert.throws(()=>buildReport([],[],[],[],[],[],'',''));
  assert.throws(()=>buildReport([],[],[],[],[],[],'2026-09-12','2026-09-11'));
 });
-test('manual entry rejects fractions, missing models and invalid installations',()=>{
+test('manual entry rejects fractions, missing models and invalid installations while allowing admin-defined models',()=>{
  const valid={kind:'installed',device_model:'Ruptela',quantity:1,sim_count:0,customer_ref:'C'};
  assert.doesNotThrow(()=>validateOperation(valid));
  assert.throws(()=>validateOperation({...valid,quantity:1.5}));
  assert.throws(()=>validateOperation({...valid,sim_count:2}));
- assert.throws(()=>validateOperation({...valid,device_model:'Other'}));
+ assert.doesNotThrow(()=>validateOperation({...valid,device_model:'FMC150'}));
  assert.throws(()=>validateOperation({...valid,customer_ref:' '}));
  assert.throws(()=>validateOperation({kind:'received',device_model:'',quantity:0,sim_count:10,customer_ref:''}));
  assert.doesNotThrow(()=>validateOperation({kind:'received',device_model:'',quantity:0,sim_count:10,sim_provider:'Etisalat',customer_ref:''}));

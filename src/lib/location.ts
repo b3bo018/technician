@@ -36,28 +36,6 @@ function messageForError(error: GeolocationPositionError) {
   return 'The phone is still waiting for a location. Keep SecureTrack open and tap Try again.';
 }
 
-function watchForPosition(options: PositionOptions) {
-  return new Promise<LocationFix>((resolve, reject) => {
-    let watchId: number | undefined;
-    let settled = false;
-    const finish = (action: () => void) => {
-      if (settled) return;
-      settled = true;
-      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
-      action();
-    };
-    watchId = navigator.geolocation.watchPosition(
-      position => finish(() => resolve({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy_m: position.coords.accuracy,
-      })),
-      error => finish(() => reject(new LocationError(messageForError(error), error.code))),
-      options,
-    );
-  });
-}
-
 function requestPosition(options: PositionOptions) {
   return new Promise<LocationFix>((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
@@ -77,29 +55,19 @@ export async function captureLocation(): Promise<LocationFix> {
     throw new LocationError('Location is unavailable in this browser. Open the live SecureTrack site in Safari or Chrome and try again.', 2);
   }
 
-  // Keep one request active while Chrome resolves the site permission and GPS
-  // fix inside an installed Android app.
-  if (isAndroidAppContext() && typeof (navigator.geolocation as Partial<Geolocation>).watchPosition === 'function') {
-    return watchForPosition({
-      enableHighAccuracy: true,
-      timeout: 30000,
-      maximumAge: 0,
-    });
-  }
-
-  // A recent operating-system fix is fast and reliable inside an installed iOS PWA.
-  // If none exists, ask the GPS sensor for a fresh, more accurate position.
+  // Use a recent operating-system fix first so field staff are not left waiting
+  // for a completely new GPS lock. Fall back to a fresh high-accuracy fix.
   try {
     return await requestPosition({
       enableHighAccuracy: false,
-      timeout: 12000,
-      maximumAge: 120000,
+      timeout: 5000,
+      maximumAge: 180000,
     });
   } catch (error) {
     if (error instanceof LocationError && error.code === 1) throw error;
     return requestPosition({
       enableHighAccuracy: true,
-      timeout: 30000,
+      timeout: isAndroidAppContext()?15000:20000,
       maximumAge: 0,
     });
   }

@@ -2,6 +2,23 @@
 
 SecureTrack is a role-based field operations PWA for technicians, administrators, managers, accountants, HR, and IT staff. The production application is hosted at [track-technician-b3bo018-f1603.web.app](https://track-technician-b3bo018-f1603.web.app/).
 
+## Current source and local hosting
+
+The complete working interface is on branch `revamp/scheduled-attendance-inventory`. Use this branch on another computer to obtain the current screens, styles, certificate templates, logos, and workflows. Earlier committed copies did not include all updates made after 24 September 2026.
+
+This source still uses Firebase Authentication and Firestore. Running Vite on a local computer only hosts the frontend; it does **not** create a local database or remove Firebase quotas. The independent local-server migration is not complete. Preserve the existing React screens and assets when changing the backend.
+
+Clone into a new folder rather than overwriting another local-server project or its database:
+
+```bash
+git clone --branch revamp/scheduled-attendance-inventory https://github.com/b3bo018/technician.git
+cd technician
+pnpm install
+pnpm dev
+```
+
+Credentials, signing keys, local SDKs, caches, exports, and generated builds are intentionally excluded. Business records and user accounts live in the database and are not part of a Git clone.
+
 ## Current features
 
 - Administrator-created accounts and role-based workspaces
@@ -12,13 +29,13 @@ SecureTrack is a role-based field operations PWA for technicians, administrators
 - Daily, weekly, and monthly reporting with Excel export
 - HR performance, duration, overtime, and score views
 - Profile photos, responsive mobile layouts, and PWA installation
-- Signed Android APK/AAB support through a Trusted Web Activity
+- Signed Android APK/AAB support through Capacitor
 
 ## Stack
 
 - React 19, TypeScript, and Vite
 - Firebase Authentication, Cloud Firestore, and Firebase Hosting
-- Workbox through `vite-plugin-pwa`
+- Web app manifest and install prompt; older service workers are removed by the current app
 - ZXing WASM through `barcode-detector`
 - ExcelJS for reports
 - localForage for the technician outbox
@@ -45,6 +62,6 @@ Firebase Hosting enforces HTTPS, HSTS, a restrictive Content Security Policy, fr
 
 ## Android releases
 
-The Android package ID is `com.securetrack.technician`. The public Digital Asset Link is versioned at `public/.well-known/assetlinks.json`.
+The current Capacitor Android package ID is `com.securetrack.fieldoperations` (version 1.2.7, version code 10). The older `native-android/` project is a legacy wrapper and is not the current APK build target.
 
-The private signing key is deliberately excluded from Git. Its encrypted backup and the current APK/AAB are stored in the owner's private OneDrive folder under `Documents/SecureTrack Private Backup/Android v2.0.0`. Future Android releases must reuse that key and increment both the version and version code.
+The private signing key and `android/securetrack-signing.properties` are deliberately excluded from Git. Obtain the existing signing setup from the owner's private backup before building a signed update. Future Android releases must reuse that key and increment the version code; do not generate a replacement key.

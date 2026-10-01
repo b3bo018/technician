@@ -11,7 +11,7 @@ export function JobDetailModal({shift,installation,attendance,onClose,onEdit}:{s
   {row('Customer',shift.company_name||shift.customer_name||shift.site_name)}{row('Vehicle plate(s)',(shift.vehicle_numbers?.length?shift.vehicle_numbers:[shift.vehicle_number]).filter(Boolean).join(' · '))}
   {row('Assigned technician',shift.technician_name)}{row('Assigned at',displayTime(shift.assigned_at||shift.scheduled_at,shift.timezone))}
   {row('Arrived at',attendance?displayTime(attendance.timestamp,shift.timezone):'—')}{row('Completed at',installation?displayTime(installation.completed_at||installation.timestamp,shift.timezone):'—')}
-  {row('Completed by',installation?completionActor(installation):'—')}{installation?.completion_source==='admin_override'&&row('Administrative reason',installation.completion_reason)}
+  {row('Completed by',installation?completionActor(installation):'—')}{installation&&row('Vehicle online check',installation.online_status==='showing_online'?'Showing online':installation.online_status==='not_showing'?'Not showing':'Not checked')}{installation?.completion_source==='admin_override'&&row('Administrative reason',installation.completion_reason)}
   {row('Duration on site',duration?`${Math.floor(duration/60)}h ${duration%60}m`:'—')}{row('Device model',installation?.device_model)}
   {row('IMEI',(installation?.device_imeis||[]).join(' · '))}{row('SIM number',(installation?.sim_numbers||[]).join(' · '))}
   {row('Arrival location',attendance?<a target="_blank" rel="noreferrer" href={`https://www.google.com/maps?q=${attendance.latitude},${attendance.longitude}`}>Open map · ±{Math.round(attendance.accuracy_m)} m</a>:'—')}

@@ -15,3 +15,17 @@ deliverables/
 .android-sdk/
 
 native-android/.gradle/
+
+# Machine-local credentials, SDKs, build caches, and temporary exports
+.config/
+.firebase-config/
+.gradle-user/
+.tooling/
+.android-user/
+tmp/
+*.tsbuildinfo
+*.jks
+*.p12
+*.pfx
+*signing.properties
+*service-account*.json

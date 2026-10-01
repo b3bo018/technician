@@ -1,4 +1,5 @@
 import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, Shift, SimProvider, Stock, Technician, emptyStock, simStockKey, SIM_PROVIDERS, SIM_STOCK_KEYS } from '../types';
+import { saveDownload } from './download';
 export const TIME_ZONE = import.meta.env?.VITE_BUSINESS_TIME_ZONE || 'Asia/Dubai';
 export function dayKey(value: string | Date, timezone = TIME_ZONE): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
@@ -52,7 +53,7 @@ export function stockAt(account: InventoryAccount | undefined, movements: Moveme
       continue;
     }
     const sign = m.type === 'received' ? 1 : -1;
-    if (m.device_model) stock[m.device_model] += sign * m.quantity;
+    if (m.device_model) stock[m.device_model] = (stock[m.device_model]||0) + sign * m.quantity;
     stock[simStockKey(m.sim_provider)] += sign * m.sim_count;
   }
   return stock;
@@ -79,7 +80,7 @@ export function attendanceStatus(shift: Shift, checkin?: Attendance, now = Date.
 export function validateOperation(op: { kind: string; device_model: string; quantity: number; sim_count: number; sim_provider?: SimProvider; customer_ref: string; shift_id?: string; job_type?: string; inspection_action?: string; unit_records?:unknown[]; device_imeis?: string[]; sim_numbers?: string[]; completion_latitude?:number; completion_longitude?:number; completion_accuracy_m?:number }) {
   if (!['received', 'installed', 'sim-used', 'job-completed'].includes(op.kind)) throw new Error('Choose a valid stock action.');
   if (!Number.isInteger(op.quantity) || !Number.isInteger(op.sim_count) || op.quantity < 0 || op.sim_count < 0 || op.quantity > 10000 || op.sim_count > 10000) throw new Error('Quantities must be whole numbers between 0 and 10,000.');
-  if (op.quantity > 0 && !DEVICE_MODELS.includes(op.device_model as any)) throw new Error('Select a device model.');
+  if (op.quantity > 0 && (!op.device_model.trim()||op.device_model.length>80)) throw new Error('Select a device model.');
   if (op.quantity === 0 && op.device_model !== '' && op.kind !== 'job-completed') throw new Error('SIM-only entries must not include a device.');
   if (op.quantity + op.sim_count === 0 && op.kind !== 'job-completed') throw new Error('Enter a device or SIM quantity.');
   if (op.sim_count > 0 && !SIM_PROVIDERS.includes(op.sim_provider as SimProvider)) throw new Error('Choose Etisalat, du, or International for the SIM stock.');
@@ -157,10 +158,9 @@ export function buildReport(technicians: Technician[], installations: Installati
   }
   return rows;
 }
-export function downloadCSV(rows: Record<string, string | number>[], filename: string) {
+export async function downloadCSV(rows: Record<string, string | number>[], filename: string) {
   if (!rows.length) throw new Error('No technicians match this report.');
   const keys = Object.keys(rows[0]);
   const content = '\uFEFF' + [keys.map(csvCell).join(','), ...rows.map(row => keys.map(k => csvCell(row[k])).join(','))].join('\r\n');
-  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  await saveDownload(new Blob([content], { type: 'text/csv;charset=utf-8' }), filename, 'SecureTrack CSV report');
 }

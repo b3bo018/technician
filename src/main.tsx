@@ -1,12 +1,18 @@
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { logAppError } from './lib/errorLogging';
 
 if ('serviceWorker' in navigator) {
-  const checkForUpdate = () => navigator.serviceWorker.getRegistration().then(registration => registration?.update()).catch(() => {});
-  window.addEventListener('focus', checkForUpdate);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
-  checkForUpdate();
+  navigator.serviceWorker.getRegistrations()
+    .then(registrations=>Promise.all(registrations.map(registration=>registration.unregister())))
+    .then(()=>caches.keys())
+    .then(keys=>Promise.all(keys.map(key=>caches.delete(key))))
+    .catch(()=>{});
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+window.addEventListener('error',event=>void logAppError(event.error||event.message,'window-error'));
+window.addEventListener('unhandledrejection',event=>void logAppError(event.reason,'unhandled-promise'));
+
+createRoot(document.getElementById('root')!).render(<AppErrorBoundary><App /></AppErrorBoundary>);

@@ -11,7 +11,7 @@ service cloud.firestore {
   function stockAdmin(){return active()&&profile().role in ['master_admin','admin','accountant'];}
   function assigner(){return active()&&profile().role in ['master_admin','admin'];}
   function agreementStaff(){return active()&&profile().role in ['master_admin','owner','admin','accountant','hr'];}
-  function model(v){return v in ['FMC920','FMC130','FMC125','FMM130','FMM125','Jimi VL03','GT06','GT06N','LV02','Ruptela'];}
+  function model(v){return v is string&&v.size()>0&&v.size()<=80;}
   function job(v){return v in ['new_installation','device_change','sim_change','sim_device_change','device_removal','payment_collection','inspection','mixed'];}
   function inspectionAction(v){return v in ['check_only','device_change','sim_change','sim_device_change'];}
   function simProvider(v){return v in ['Etisalat','du','International'];}
@@ -23,6 +23,10 @@ service cloud.firestore {
   function assignedShift(id){return get(/databases/$(database)/documents/shifts/$(id)).data;}
   function assignedJobType(id){return assignedShift(id).get('job_type','new_installation');}
   function assignedUnitCount(id){return assignedShift(id).get('unit_count',1);}
+  function completion(id){return getAfter(/databases/$(database)/documents/installations/$(id)).data;}
+  function completionShift(id){return assignedShift(completion(id).shift_id);}
+  function validJobCore(d){return d.job_reference is string&&d.job_reference.matches('ST[0-9]{5,}')&&d.technician_id is string&&d.technician_name is string&&d.site_name is string&&d.company_name is string&&d.contact_person is string&&d.customer_phone is string&&d.vehicle_number is string&&d.vehicle_numbers is list&&d.unit_jobs is list&&d.maps_url is string&&job(d.job_type)&&d.unit_count is int&&d.unit_count>=1&&d.unit_count<=50&&d.unit_jobs.size()==d.unit_count&&optionalCoordinates(d)&&d.scheduled_at is timestamp&&d.window_start is timestamp&&d.window_end is timestamp&&d.window_start<=d.scheduled_at&&d.scheduled_at<d.window_end&&d.get('duration_minutes',60) is int&&d.get('duration_minutes',60)>=15&&d.get('duration_minutes',60)<=720&&d.get('expected_end_at',d.scheduled_at+duration.value(d.get('duration_minutes',60),'m'))>d.scheduled_at&&d.get('job_notes','') is string&&d.get('job_notes','').size()<=1500&&d.get('payment_collection_required',false) is bool&&d.get('payment_amount',0) is number&&d.get('payment_amount',0)>=0&&d.get('payment_amount',0)<=1000000;}
+  function validScheduledJob(d){return d.company_name.size()>0&&d.contact_person.size()>0&&d.customer_phone.size()>0&&d.vehicle_number.size()>0&&d.maps_url.size()>0&&exists(/databases/$(database)/documents/users/$(d.technician_id))&&get(/databases/$(database)/documents/users/$(d.technician_id)).data.role=='technician';}
 
   match /users/{uid} {
    allow read: if owner(uid)||staff();
@@ -30,14 +34,14 @@ service cloud.firestore {
     &&request.resource.data.uid==uid&&request.resource.data.email is string&&request.resource.data.displayName is string&&request.resource.data.displayName.size()>0&&request.resource.data.displayName.size()<=160
     &&request.resource.data.role in ['admin','manager','accountant','hr','it','technician']&&request.resource.data.status=='active'&&request.resource.data.inventory_count==0&&validPhoto(request.resource.data)
     &&request.resource.data.inventory_breakdown=={'fmc920':0,'fmc130':0,'sim_cards':0}&&request.resource.data.created_at==request.time;
-   allow update: if (master()&&uid!=request.auth.uid&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','status','photoDataUrl'])
-    &&request.resource.data.role in ['admin','manager','accountant','hr','it','technician']&&request.resource.data.get('status','active') in ['active','deactivated']&&validPhoto(request.resource.data))
+   allow update: if (master()&&uid!=request.auth.uid&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','status','photoDataUrl','is_deleted','deleted_at','deleted_by_uid','deleted_by_name','deletion_reason'])
+     &&request.resource.data.role in ['master_admin','admin','manager','accountant','hr','it','technician']&&request.resource.data.get('status','active') in ['active','deactivated']&&validPhoto(request.resource.data))
     ||(owner(uid)&&active()&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','photoDataUrl'])&&request.resource.data.displayName is string&&request.resource.data.displayName.size()<=160&&validPhoto(request.resource.data));
    allow delete: if uid!=request.auth.uid&&(master()||(role('admin')&&!(resource.data.role in ['master_admin','owner'])));
   }
   match /settings/{id} {
    allow read: if active();
-   allow create, update: if (stockAdmin()||role('hr'))&&id=='stock_alerts'&&request.resource.data.keys().hasOnly(['threshold','clock_in_time','clock_out_time','late_grace_minutes','max_break_minutes','updated_at'])&&integer(request.resource.data.threshold)&&request.resource.data.clock_in_time is string&&request.resource.data.clock_in_time.matches('([01][0-9]|2[0-3]):[0-5][0-9]')&&request.resource.data.clock_out_time is string&&request.resource.data.clock_out_time.matches('([01][0-9]|2[0-3]):[0-5][0-9]')&&request.resource.data.late_grace_minutes is int&&request.resource.data.late_grace_minutes>=0&&request.resource.data.late_grace_minutes<=180&&request.resource.data.max_break_minutes is int&&request.resource.data.max_break_minutes>=1&&request.resource.data.max_break_minutes<=240&&request.resource.data.updated_at==request.time;
+   allow create, update: if (stockAdmin()||role('hr'))&&id=='stock_alerts'&&request.resource.data.keys().hasOnly(['threshold','device_minimums','sim_minimums','clock_in_time','clock_out_time','late_grace_minutes','max_break_minutes','updated_at'])&&integer(request.resource.data.threshold)&&request.resource.data.get('device_minimums',{}) is map&&request.resource.data.get('sim_minimums',{}) is map&&request.resource.data.clock_in_time is string&&request.resource.data.clock_in_time.matches('([01][0-9]|2[0-3]):[0-5][0-9]')&&request.resource.data.clock_out_time is string&&request.resource.data.clock_out_time.matches('([01][0-9]|2[0-3]):[0-5][0-9]')&&request.resource.data.late_grace_minutes is int&&request.resource.data.late_grace_minutes>=0&&request.resource.data.late_grace_minutes<=180&&request.resource.data.max_break_minutes is int&&request.resource.data.max_break_minutes>=1&&request.resource.data.max_break_minutes<=240&&request.resource.data.updated_at==request.time;
    allow delete: if master();
   }
   match /inventory_accounts/{uid} {
@@ -45,8 +49,34 @@ service cloud.firestore {
    function oldLegacyBalance(){let p=get(/databases/$(database)/documents/users/$(uid)).data;let b=p.get('inventory_breakdown',{});let total=p.get('inventory_count',0);return{'FMC920':b.get('fmc920',math.floor(total / 2)),'FMC130':b.get('fmc130',math.ceil(total / 2)),'FMC125':0,'FMM130':0,'FMM125':0,'Jimi VL03':0,'GT06':0,'GT06N':0,'LV02':0,'Ruptela':0,'SIM':b.get('sim_cards',0)};}
    allow read: if active()&&(owner(uid)||resource.data.technician_id==request.auth.uid||staff());
    allow create: if (owner(uid)||stockAdmin())&&active()&&request.resource.data.keys().hasOnly(['technician_id','opening','timestamp'])&&request.resource.data.technician_id==uid&&request.resource.data.timestamp==request.time&&(request.resource.data.opening==legacyBalance()||request.resource.data.opening==oldLegacyBalance());
-   allow update: if false;
+    allow update: if false;
    allow delete: if master();
+  }
+  match /company_inventory/{id} {
+   allow read: if staff();
+   allow create, update: if id=='global'&&stockAdmin()&&request.resource.data.keys().hasOnly(['balance','updated_at','updated_by','updated_by_uid'])&&request.resource.data.balance is map&&request.resource.data.updated_at==request.time&&request.resource.data.updated_by is string&&request.resource.data.updated_by_uid==request.auth.uid;
+   allow delete: if master();
+  }
+  match /company_inventory_history/{id} {
+   allow read: if staff();
+   allow create: if stockAdmin()&&request.resource.data.keys().hasOnly(['previous','next','notes','changed_at','changed_by','changed_by_uid'])&&request.resource.data.previous is map&&request.resource.data.next is map&&request.resource.data.notes is string&&request.resource.data.notes.size()>0&&request.resource.data.notes.size()<=1000&&request.resource.data.changed_at==request.time&&request.resource.data.changed_by_uid==request.auth.uid;
+   allow update, delete: if false;
+  }
+  match /technician_live_stock/{uid} {
+   allow read: if active()&&(owner(uid)||staff());
+   allow create: if active()&&(owner(uid)||stockAdmin())&&request.resource.data.technician_id==uid&&request.resource.data.balance is map&&request.resource.data.updated_at==request.time;
+   allow update: if active()&&(owner(uid)||stockAdmin())&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['technician_id','balance','updated_at'])&&request.resource.data.technician_id==uid&&request.resource.data.balance is map&&request.resource.data.updated_at==request.time;
+   allow delete: if master();
+  }
+  match /assignment_index/{id} {
+   allow read: if active();
+   allow create, update: if active()&&request.resource.data.assigned_by_uid==request.auth.uid&&request.resource.data.kind in ['imei','sim']&&request.resource.data.value is string&&request.resource.data.value.size()>0&&request.resource.data.vehicle is string&&request.resource.data.installation_id is string&&request.resource.data.status in ['active','uninstalled']&&request.resource.data.assigned_at==request.time&&getAfter(/databases/$(database)/documents/installations/$(request.resource.data.installation_id)).data.technician_id==request.auth.uid;
+   allow delete: if false;
+  }
+  match /job_online_status_history/{id} {
+   allow read: if staff();
+   allow create: if active()&&profile().role in ['master_admin','admin','manager','hr']&&request.resource.data.changed_by_uid==request.auth.uid&&request.resource.data.changed_at==request.time&&request.resource.data.previous_status in ['showing_online','not_showing','not_checked']&&request.resource.data.new_status in ['showing_online','not_showing','not_checked'];
+   allow update, delete: if false;
   }
   match /inventory_logs/{id} {
    function validMovement(d){return d.keys().hasOnly(['technician_id','technician_name','type','device_model','quantity','sim_count','device_imeis','sim_provider','timestamp','captured_at','notes'])&&d.technician_name is string&&d.notes is string&&d.notes.size()<=1000&&integer(d.quantity)&&integer(d.sim_count)&&d.quantity+d.sim_count>0&&((d.quantity==0&&d.device_model=='')||(d.quantity>0&&model(d.device_model)))&&(!d.keys().hasAny(['device_imeis'])||(d.device_imeis is list&&d.device_imeis.size()<=d.quantity))&&(!d.keys().hasAny(['sim_provider'])||simProvider(d.sim_provider))&&d.timestamp==request.time&&d.captured_at is timestamp;}
@@ -56,29 +86,39 @@ service cloud.firestore {
    allow create: if active()
     &&(validMovement(request.resource.data)||validAdjustment(request.resource.data))
     &&getAfter(/databases/$(database)/documents/inventory_accounts/$(request.resource.data.technician_id)).data.technician_id==request.resource.data.technician_id
-    &&(
-     (stockAdmin()&&request.resource.data.type in ['received','adjustment'])
-     ||(
+    &&((stockAdmin()&&request.resource.data.type in ['received','adjustment'])||(
       request.resource.data.technician_id==request.auth.uid
-      &&assignedShift(id).technician_id==request.auth.uid
-      &&(
-       (assignedJobType(id) in ['new_installation','sim_device_change']&&request.resource.data.type=='installed'&&request.resource.data.quantity==assignedUnitCount(id)&&request.resource.data.sim_count==assignedUnitCount(id))
-       ||(assignedJobType(id)=='device_change'&&request.resource.data.type=='installed'&&request.resource.data.quantity==assignedUnitCount(id)&&request.resource.data.sim_count==0)
-       ||(assignedJobType(id)=='sim_change'&&request.resource.data.type=='sim-used'&&request.resource.data.quantity==0&&request.resource.data.sim_count==assignedUnitCount(id))
-       ||(assignedJobType(id)=='inspection'&&getAfter(/databases/$(database)/documents/installations/$(id)).data.inspection_action=='device_change'&&request.resource.data.type=='installed'&&request.resource.data.quantity==assignedUnitCount(id)&&request.resource.data.sim_count==0)
-       ||(assignedJobType(id)=='inspection'&&getAfter(/databases/$(database)/documents/installations/$(id)).data.inspection_action=='sim_change'&&request.resource.data.type=='sim-used'&&request.resource.data.quantity==0&&request.resource.data.sim_count==assignedUnitCount(id))
-       ||(assignedJobType(id)=='inspection'&&getAfter(/databases/$(database)/documents/installations/$(id)).data.inspection_action=='sim_device_change'&&request.resource.data.type=='installed'&&request.resource.data.quantity==assignedUnitCount(id)&&request.resource.data.sim_count==assignedUnitCount(id))
-       ||(assignedJobType(id)=='inspection'&&getAfter(/databases/$(database)/documents/installations/$(id)).data.keys().hasAny(['unit_records'])&&request.resource.data.quantity==getAfter(/databases/$(database)/documents/installations/$(id)).data.device_imeis.size()&&request.resource.data.sim_count==getAfter(/databases/$(database)/documents/installations/$(id)).data.sim_numbers.size()&&((request.resource.data.quantity>0&&request.resource.data.type=='installed')||(request.resource.data.quantity==0&&request.resource.data.sim_count>0&&request.resource.data.type=='sim-used')))
-       ||(assignedJobType(id)=='mixed'&&request.resource.data.quantity==getAfter(/databases/$(database)/documents/installations/$(id)).data.device_imeis.size()&&request.resource.data.sim_count==getAfter(/databases/$(database)/documents/installations/$(id)).data.sim_numbers.size()&&((request.resource.data.quantity>0&&request.resource.data.type=='installed')||(request.resource.data.quantity==0&&request.resource.data.sim_count>0&&request.resource.data.type=='sim-used')))
-      )
-     )
-    );
-   allow update: if false;
+      &&completion(id).technician_id==request.auth.uid
+      &&completionShift(id).technician_id==request.auth.uid
+      &&request.resource.data.quantity==completion(id).device_imeis.size()
+      &&request.resource.data.sim_count==completion(id).sim_numbers.size()
+      &&((request.resource.data.quantity>0&&request.resource.data.type=='installed')||(request.resource.data.quantity==0&&request.resource.data.sim_count>0&&request.resource.data.type=='sim-used'))
+    ));
+    allow update: if false;
    allow delete: if master();
   }
   match /installations/{id} {
    allow get: if active()&&!exists(/databases/$(database)/documents/installations/$(id));
    allow read: if active()&&(resource.data.get('technician_id','')==request.auth.uid||resource.data.get('tech_id','')==request.auth.uid||staff());
+   allow create: if active()
+    &&request.resource.data.keys().hasOnly(['technician_id','technician_name','shift_id','job_type','inspection_action','unit_count','unit_index','progress_completed','progress_total','unit_records','device_model','device_imeis','sim_numbers','sim_count','sim_provider','customer_ref','vehicle_ref','notes','timestamp','completed_at','completion_latitude','completion_longitude','completion_accuracy_m','payment_received_amount','payment_method','completed_by_uid','completed_by_name','captured_at'])
+    &&request.resource.data.technician_id==request.auth.uid&&request.resource.data.completed_by_uid==request.auth.uid
+    &&assignedShift(request.resource.data.shift_id).technician_id==request.auth.uid
+    &&request.resource.data.unit_index is int&&request.resource.data.unit_index>=0&&request.resource.data.unit_index<assignedUnitCount(request.resource.data.shift_id)
+    &&request.resource.data.progress_total==assignedUnitCount(request.resource.data.shift_id)&&request.resource.data.progress_completed is int&&request.resource.data.progress_completed>=1&&request.resource.data.progress_completed<=request.resource.data.progress_total
+    &&request.resource.data.unit_count==1&&request.resource.data.unit_records is list&&request.resource.data.unit_records.size()==1
+    &&request.resource.data.job_type==assignedShift(request.resource.data.shift_id).unit_jobs[request.resource.data.unit_index].job_type
+    &&request.resource.data.vehicle_ref==assignedShift(request.resource.data.shift_id).unit_jobs[request.resource.data.unit_index].vehicle_number
+    &&request.resource.data.device_imeis is list&&request.resource.data.device_imeis.size()<=1&&request.resource.data.sim_numbers is list&&request.resource.data.sim_numbers.size()<=1&&request.resource.data.sim_count==request.resource.data.sim_numbers.size()
+    &&request.resource.data.timestamp==request.time&&request.resource.data.completed_at==request.time&&request.resource.data.captured_at is timestamp&&completionCoordinates(request.resource.data)
+    &&request.resource.data.customer_ref is string&&request.resource.data.customer_ref.size()>0&&request.resource.data.customer_ref.size()<=160&&request.resource.data.notes is string&&request.resource.data.notes.size()<=1000
+    &&(!request.resource.data.keys().hasAny(['sim_provider'])||simProvider(request.resource.data.sim_provider))
+    &&((request.resource.data.job_type in ['new_installation','sim_device_change']&&model(request.resource.data.device_model)&&request.resource.data.device_imeis.size()==1&&request.resource.data.sim_numbers.size()==1&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='installed')
+     ||(request.resource.data.job_type=='device_change'&&model(request.resource.data.device_model)&&request.resource.data.device_imeis.size()==1&&request.resource.data.sim_numbers.size()==0&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='installed')
+     ||(request.resource.data.job_type=='sim_change'&&request.resource.data.device_model==''&&request.resource.data.device_imeis.size()==0&&request.resource.data.sim_numbers.size()==1&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='sim-used')
+     ||(request.resource.data.job_type=='device_removal'&&request.resource.data.device_model==''&&request.resource.data.device_imeis.size()==1&&request.resource.data.sim_numbers.size()==0&&!existsAfter(/databases/$(database)/documents/inventory_logs/$(id)))
+     ||(request.resource.data.job_type=='payment_collection'&&request.resource.data.device_model==''&&request.resource.data.device_imeis.size()==0&&request.resource.data.sim_numbers.size()==0&&request.resource.data.payment_received_amount is number&&request.resource.data.payment_method in ['cash','cheque']&&!existsAfter(/databases/$(database)/documents/inventory_logs/$(id)))
+     ||(request.resource.data.job_type=='inspection'&&request.resource.data.keys().hasAny(['inspection_action'])&&((request.resource.data.inspection_action=='check_only'&&request.resource.data.device_imeis.size()==0&&request.resource.data.sim_numbers.size()==0&&!existsAfter(/databases/$(database)/documents/inventory_logs/$(id)))||(request.resource.data.inspection_action=='device_change'&&request.resource.data.device_imeis.size()==1&&request.resource.data.sim_numbers.size()==0&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='installed')||(request.resource.data.inspection_action=='sim_change'&&request.resource.data.device_imeis.size()==0&&request.resource.data.sim_numbers.size()==1&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='sim-used')||(request.resource.data.inspection_action=='sim_device_change'&&request.resource.data.device_imeis.size()==1&&request.resource.data.sim_numbers.size()==1&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='installed'))));
    allow create: if assigner()&&!exists(/databases/$(database)/documents/installations/$(id))
     &&request.resource.data.keys().hasOnly(['technician_id','technician_name','shift_id','job_type','unit_count','device_model','device_imeis','sim_numbers','sim_count','customer_ref','vehicle_ref','notes','completion_source','completed_by_uid','completed_by_name','completed_by_role','completion_reason','timestamp','completed_at','captured_at'])
     &&request.resource.data.technician_id==assignedShift(id).technician_id&&request.resource.data.technician_name==assignedShift(id).technician_name&&request.resource.data.shift_id==id&&request.resource.data.job_type==assignedJobType(id)&&request.resource.data.unit_count==assignedUnitCount(id)
@@ -105,27 +145,43 @@ service cloud.firestore {
      ))
      ||(request.resource.data.job_type=='inspection'&&request.resource.data.unit_records is list&&request.resource.data.unit_records.size()==request.resource.data.unit_count&&((request.resource.data.device_imeis.size()==0&&request.resource.data.sim_numbers.size()==0&&!existsAfter(/databases/$(database)/documents/inventory_logs/$(id)))||(request.resource.data.device_imeis.size()>0&&model(request.resource.data.device_model)&&existsAfter(/databases/$(database)/documents/inventory_logs/$(id))&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.quantity==request.resource.data.device_imeis.size()&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.sim_count==request.resource.data.sim_numbers.size())||(request.resource.data.device_imeis.size()==0&&request.resource.data.sim_numbers.size()>0&&existsAfter(/databases/$(database)/documents/inventory_logs/$(id))&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='sim-used'&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.sim_count==request.resource.data.sim_numbers.size())))
      ||(request.resource.data.job_type=='mixed'&&request.resource.data.unit_records is list&&request.resource.data.unit_records.size()==request.resource.data.unit_count&&((request.resource.data.device_imeis.size()==0&&request.resource.data.sim_numbers.size()==0&&!existsAfter(/databases/$(database)/documents/inventory_logs/$(id)))||(request.resource.data.device_imeis.size()>0&&model(request.resource.data.device_model)&&existsAfter(/databases/$(database)/documents/inventory_logs/$(id))&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.quantity==request.resource.data.device_imeis.size()&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.sim_count==request.resource.data.sim_numbers.size())||(request.resource.data.device_imeis.size()==0&&request.resource.data.sim_numbers.size()>0&&existsAfter(/databases/$(database)/documents/inventory_logs/$(id))&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.type=='sim-used'&&getAfter(/databases/$(database)/documents/inventory_logs/$(id)).data.sim_count==request.resource.data.sim_numbers.size()))));
-   allow update: if false;
-   allow delete: if master();
+    allow update: if active()&&profile().role in ['master_admin','admin','manager','hr']
+     &&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['online_status','online_status_updated_at','online_status_updated_by','online_status_updated_by_uid'])
+     &&request.resource.data.online_status in ['showing_online','not_showing','not_checked']&&request.resource.data.online_status_updated_at==request.time&&request.resource.data.online_status_updated_by_uid==request.auth.uid;
+    allow delete: if master();
   }
-  match /shifts/{id} {
+   match /schedule_locks/{id} {
+    allow read: if staff();
+    allow create, update: if assigner()&&request.resource.data.technician_id is string&&request.resource.data.date is string&&request.resource.data.entries is map&&request.resource.data.updated_at==request.time;
+    allow delete: if false;
+   }
+   match /shifts/{id} {
    allow read: if active()&&(resource.data.technician_id==request.auth.uid||staff());
-   allow create: if assigner()&&request.resource.data.keys().hasOnly(['job_reference','technician_id','technician_name','site_name','company_name','customer_name','contact_person','customer_phone','vehicle_number','vehicle_numbers','unit_jobs','maps_url','job_notes','payment_collection_required','payment_amount','job_type','unit_count','latitude','longitude','radius_m','scheduled_at','window_start','window_end','grace_minutes','timezone','date','status','assigned_at','created_at'])
-    &&exists(/databases/$(database)/documents/users/$(request.resource.data.technician_id))&&get(/databases/$(database)/documents/users/$(request.resource.data.technician_id)).data.role=='technician'
-    &&request.resource.data.company_name is string&&request.resource.data.company_name.size()>0&&request.resource.data.company_name.size()<=160&&request.resource.data.contact_person is string&&request.resource.data.contact_person.size()>0&&request.resource.data.contact_person.size()<=160
-    &&request.resource.data.job_reference is string&&request.resource.data.job_reference.matches('ST[0-9]{5,}')&&request.resource.data.customer_phone is string&&request.resource.data.customer_phone.size()<=32&&request.resource.data.vehicle_number is string&&request.resource.data.vehicle_number.size()>0&&request.resource.data.vehicle_number.size()<=32&&request.resource.data.maps_url is string&&request.resource.data.maps_url.size()<=2048&&request.resource.data.get('job_notes','') is string&&request.resource.data.get('job_notes','').size()<=1500&&request.resource.data.get('payment_collection_required',false) is bool&&request.resource.data.get('payment_amount',0) is number&&request.resource.data.get('payment_amount',0)>=0&&request.resource.data.get('payment_amount',0)<=1000000&&job(request.resource.data.job_type)&&request.resource.data.unit_count is int&&request.resource.data.unit_count>=1&&request.resource.data.unit_count<=50&&request.resource.data.unit_jobs is list&&request.resource.data.unit_jobs.size()==request.resource.data.unit_count
-    &&optionalCoordinates(request.resource.data)&&request.resource.data.radius_m is int&&request.resource.data.radius_m>=25&&request.resource.data.radius_m<=10000&&request.resource.data.grace_minutes is int&&request.resource.data.grace_minutes>=0&&request.resource.data.grace_minutes<=120
-    &&request.resource.data.site_name is string&&request.resource.data.site_name.size()>0&&request.resource.data.site_name.size()<=160&&request.resource.data.technician_name is string&&request.resource.data.timezone is string&&request.resource.data.date is string
-    &&request.resource.data.scheduled_at is timestamp&&request.resource.data.window_start is timestamp&&request.resource.data.window_end is timestamp&&request.resource.data.window_start<=request.resource.data.scheduled_at&&request.resource.data.scheduled_at<request.resource.data.window_end&&request.resource.data.window_end-request.resource.data.window_start<=duration.value(25,'h')&&request.resource.data.status=='assigned'&&request.resource.data.assigned_at==request.time&&request.resource.data.created_at==request.time;
-   allow update: if (assigner()&&!exists(/databases/$(database)/documents/installations/$(id))&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['technician_id','technician_name','site_name','company_name','customer_name','contact_person','customer_phone','vehicle_number','vehicle_numbers','unit_jobs','maps_url','job_notes','payment_collection_required','payment_amount','job_type','unit_count','latitude','longitude','radius_m','scheduled_at','window_start','window_end','grace_minutes','timezone','date','updated_at'])
-    &&exists(/databases/$(database)/documents/users/$(request.resource.data.technician_id))&&get(/databases/$(database)/documents/users/$(request.resource.data.technician_id)).data.role=='technician'
-    &&request.resource.data.company_name is string&&request.resource.data.company_name.size()>0&&request.resource.data.contact_person is string&&request.resource.data.contact_person.size()>0&&request.resource.data.customer_phone is string&&request.resource.data.vehicle_number is string&&request.resource.data.vehicle_number.size()>0&&request.resource.data.maps_url is string&&request.resource.data.get('job_notes','') is string&&request.resource.data.get('job_notes','').size()<=1500&&request.resource.data.get('payment_collection_required',false) is bool&&request.resource.data.get('payment_amount',0) is number&&request.resource.data.get('payment_amount',0)>=0&&request.resource.data.get('payment_amount',0)<=1000000
-    &&job(request.resource.data.job_type)&&request.resource.data.unit_count is int&&request.resource.data.unit_count>=1&&request.resource.data.unit_count<=50&&request.resource.data.unit_jobs is list&&request.resource.data.unit_jobs.size()==request.resource.data.unit_count&&optionalCoordinates(request.resource.data)&&request.resource.data.updated_at==request.time)
-    ||((profile().role in ['admin','master_admin'])&&resource.data.get('status','assigned')=='completed'&&request.resource.data.get('status','assigned')=='completed'&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['site_name','company_name','customer_name','contact_person','customer_phone','maps_url','job_notes','payment_collection_required','payment_amount','updated_at'])&&request.resource.data.company_name is string&&request.resource.data.company_name.size()>0&&request.resource.data.contact_person is string&&request.resource.data.contact_person.size()>0&&request.resource.data.customer_phone is string&&request.resource.data.maps_url is string&&request.resource.data.get('job_notes','') is string&&request.resource.data.get('payment_collection_required',false) is bool&&request.resource.data.get('payment_amount',0) is number&&request.resource.data.updated_at==request.time)
+     allow create: if assigner()&&request.resource.data.keys().hasAll(['job_reference','technician_id','technician_name','site_name','company_name','contact_person','customer_phone','vehicle_number','vehicle_numbers','unit_jobs','maps_url','job_type','unit_count','scheduled_at','window_start','window_end','date','status','created_at'])
+      &&request.resource.data.status in ['assigned','draft']&&validJobCore(request.resource.data)
+      &&(request.resource.data.status=='draft'||validScheduledJob(request.resource.data))
+      &&request.resource.data.get('version',1)==1&&(request.resource.data.status=='draft'||request.resource.data.assigned_at==request.time)&&request.resource.data.created_at==request.time;
+    allow update: if (assigner()&&!exists(/databases/$(database)/documents/installations/$(id))&&!resource.data.get('is_deleted',false)&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['technician_id','technician_name','site_name','company_name','customer_name','contact_person','customer_phone','vehicle_number','vehicle_numbers','unit_jobs','maps_url','job_notes','payment_collection_required','payment_amount','job_type','unit_count','latitude','longitude','radius_m','scheduled_at','expected_end_at','duration_minutes','window_start','window_end','grace_minutes','timezone','date','status','version','updated_at','updated_by_uid','updated_by_name'])
+    &&request.resource.data.status in ['assigned','draft','in_progress']
+     &&(request.resource.data.status==resource.data.get('status','assigned')||(resource.data.get('status','assigned')=='draft'&&request.resource.data.status=='assigned'))
+     &&validJobCore(request.resource.data)&&(request.resource.data.status=='draft'||validScheduledJob(request.resource.data))
+     &&request.resource.data.expected_end_at is timestamp&&request.resource.data.duration_minutes is int&&request.resource.data.version==resource.data.get('version',1)+1&&request.resource.data.updated_at==request.time&&request.resource.data.updated_by_uid==request.auth.uid)
+    ||(assigner()&&!resource.data.get('is_deleted',false)&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_deleted','previous_status','status','deleted_at','deleted_by_uid','deleted_by_name','deletion_reason','version','updated_at','updated_by_uid','updated_by_name'])&&request.resource.data.is_deleted==true&&request.resource.data.previous_status==resource.data.get('status','assigned')&&request.resource.data.status=='cancelled'&&request.resource.data.deleted_at==request.time&&request.resource.data.deleted_by_uid==request.auth.uid&&request.resource.data.deletion_reason is string&&request.resource.data.deletion_reason.size()>0&&request.resource.data.version==resource.data.get('version',1)+1&&request.resource.data.updated_at==request.time)
+    ||(master()&&resource.data.get('is_deleted',false)&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_deleted','status','restored_at','restored_by_uid','restored_by_name','updated_at'])&&request.resource.data.is_deleted==false&&request.resource.data.status==resource.data.get('previous_status','assigned')&&request.resource.data.restored_at==request.time&&request.resource.data.restored_by_uid==request.auth.uid&&request.resource.data.updated_at==request.time)
+    ||(assigner()&&resource.data.get('status','assigned') in ['assigned','in_progress']&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['date','scheduled_at','expected_end_at','window_start','window_end','original_scheduled_date','carried_forward','carried_forward_count','last_carried_forward_from','last_carried_forward_at','version','updated_by_uid','updated_by_name','updated_at'])&&request.resource.data.date is string&&request.resource.data.scheduled_at is timestamp&&request.resource.data.expected_end_at is timestamp&&request.resource.data.expected_end_at>request.resource.data.scheduled_at&&request.resource.data.window_start is timestamp&&request.resource.data.window_end is timestamp&&request.resource.data.window_start<=request.resource.data.scheduled_at&&request.resource.data.scheduled_at<request.resource.data.window_end&&request.resource.data.original_scheduled_date==resource.data.get('original_scheduled_date',resource.data.date)&&request.resource.data.carried_forward==true&&request.resource.data.carried_forward_count==resource.data.get('carried_forward_count',0)+1&&request.resource.data.last_carried_forward_from==resource.data.date&&request.resource.data.last_carried_forward_at==request.time&&request.resource.data.version==resource.data.get('version',1)+1&&request.resource.data.updated_by_uid==request.auth.uid&&request.resource.data.updated_at==request.time)
     ||(active()&&resource.data.technician_id==request.auth.uid&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','arrived_at'])&&resource.data.get('status','assigned')=='assigned'&&request.resource.data.status=='in_progress'&&request.resource.data.arrived_at==request.time&&getAfter(/databases/$(database)/documents/attendance_logs/$(id)).data.timestamp==request.time)
+    ||(active()&&resource.data.technician_id==request.auth.uid&&resource.data.get('status','assigned') in ['assigned','in_progress']
+      &&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','completed_units','last_vehicle_completed_at','completed_at','completion_latitude','completion_longitude','completion_accuracy_m'])
+      &&request.resource.data.completed_units==resource.data.get('completed_units',0)+1&&request.resource.data.completed_units<=resource.data.unit_count&&request.resource.data.last_vehicle_completed_at==request.time
+      &&((request.resource.data.completed_units<resource.data.unit_count&&request.resource.data.status=='in_progress')||(request.resource.data.completed_units==resource.data.unit_count&&request.resource.data.status=='completed'&&request.resource.data.completed_at==request.time&&completionCoordinates(request.resource.data))))
     ||(active()&&resource.data.technician_id==request.auth.uid&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','completed_at','completion_latitude','completion_longitude','completion_accuracy_m'])&&resource.data.get('status','assigned')=='in_progress'&&request.resource.data.status=='completed'&&request.resource.data.completed_at==request.time&&completionCoordinates(request.resource.data)&&getAfter(/databases/$(database)/documents/installations/$(id)).data.completed_at==request.time)
     ||(assigner()&&resource.data.get('status','assigned') in ['assigned','in_progress']&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','completed_at'])&&request.resource.data.status=='completed'&&request.resource.data.completed_at==request.time&&getAfter(/databases/$(database)/documents/installations/$(id)).data.completion_source=='admin_override'&&getAfter(/databases/$(database)/documents/installations/$(id)).data.completed_by_uid==request.auth.uid&&getAfter(/databases/$(database)/documents/installations/$(id)).data.completed_at==request.time);
    allow delete: if master()||(assigner()&&!exists(/databases/$(database)/documents/installations/$(id)));
+  }
+  match /job_schedule_history/{id} {
+   allow read: if staff();
+   allow create: if assigner()&&request.resource.data.keys().hasOnly(['shift_id','job_reference','vehicle_numbers','from_date','to_date','action','changed_by','changed_by_uid','changed_at'])&&request.resource.data.shift_id is string&&request.resource.data.from_date is string&&request.resource.data.to_date is string&&request.resource.data.action is string&&request.resource.data.changed_by_uid==request.auth.uid&&request.resource.data.changed_at==request.time;
+   allow update, delete: if false;
   }
   match /login_logs/{id} {
    allow get: if active()&&!exists(/databases/$(database)/documents/login_logs/$(id));
@@ -142,9 +198,9 @@ service cloud.firestore {
    allow delete: if master()||(assigner()&&!existsAfter(/databases/$(database)/documents/shifts/$(id))&&!exists(/databases/$(database)/documents/installations/$(id)));
   }
   match /counters/{id} {
-   allow get: if assigner();
-   allow create: if assigner()&&id=='jobs'&&request.resource.data.keys().hasOnly(['value','updated_at'])&&request.resource.data.value is int&&request.resource.data.value>0&&request.resource.data.updated_at==request.time;
-   allow update: if assigner()&&id=='jobs'&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['value','updated_at'])&&request.resource.data.value is int&&request.resource.data.value>resource.data.value&&request.resource.data.updated_at==request.time;
+   allow get: if assigner()||(id=='certificates'&&active()&&profile().role in ['master_admin','admin','manager']);
+   allow create: if active()&&((id=='jobs'&&assigner())||(id=='certificates'&&profile().role in ['master_admin','admin','manager']))&&request.resource.data.keys().hasOnly(['value','updated_at'])&&request.resource.data.value is int&&request.resource.data.value>0&&request.resource.data.updated_at==request.time;
+   allow update: if active()&&((id=='jobs'&&assigner())||(id=='certificates'&&profile().role in ['master_admin','admin','manager']))&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['value','updated_at'])&&request.resource.data.value is int&&request.resource.data.value>resource.data.value&&request.resource.data.updated_at==request.time;
    allow read, delete: if master();
   }
   match /work_sessions/{id} {
@@ -177,9 +233,11 @@ service cloud.firestore {
   match /agreements/{id} {
    allow read: if agreementStaff();
    allow create: if active()&&profile().role in ['master_admin','admin','hr'];
-   allow update: if active()&&profile().role in ['master_admin','admin','hr']&&resource.data.status!='signed'
+   allow update: if agreementStaff()&&resource.data.status!='signed'
+    ||(agreementStaff()&&!resource.data.get('is_deleted',false)&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_deleted','previous_status','status','deleted_at','deleted_by_uid','deleted_by_name','deletion_reason','updated_at'])&&request.resource.data.is_deleted==true&&request.resource.data.previous_status==resource.data.status&&request.resource.data.status=='cancelled'&&request.resource.data.deleted_at==request.time&&request.resource.data.deleted_by_uid==request.auth.uid&&request.resource.data.deletion_reason is string&&request.resource.data.deletion_reason.size()>0&&request.resource.data.updated_at==request.time)
+    ||(master()&&resource.data.get('is_deleted',false)&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_deleted','status','restored_at','restored_by_uid','restored_by_name','updated_at'])&&request.resource.data.is_deleted==false&&request.resource.data.status==resource.data.get('previous_status','sent')&&request.resource.data.restored_at==request.time&&request.resource.data.restored_by_uid==request.auth.uid&&request.resource.data.updated_at==request.time)
     ||(!signedIn()&&resource.data.status in ['sent','viewed']&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','signer_name','signer_designation','signer_mobile','signer_email','signature','signed_at','signing_device'])&&request.resource.data.status=='signed'&&request.resource.data.signature is string&&request.resource.data.signature.size()>100&&request.resource.data.signed_at==request.time);
-   allow delete: if master()&&resource.data.status!='signed';
+   allow delete: if agreementStaff();
   }
   match /agreement_links/{token} {
    allow get: if token.size()>=60;
@@ -188,7 +246,81 @@ service cloud.firestore {
    allow update: if agreementStaff()
     ||(!signedIn()&&resource.data.status=='sent'&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','viewed_at'])&&request.resource.data.status=='viewed'&&request.resource.data.viewed_at==request.time)
     ||(!signedIn()&&resource.data.status in ['sent','viewed']&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','signer_name','signer_designation','signer_mobile','signer_email','signature','signed_at','signing_device'])&&request.resource.data.status=='signed'&&request.resource.data.signature is string&&request.resource.data.signature.size()>100&&request.resource.data.signed_at==request.time);
-   allow delete: if master();
+   allow delete: if agreementStaff();
+  }
+  match /certificates/{id} {
+   allow read: if active()&&profile().role in ['master_admin','owner','admin','manager','accountant'];
+   allow create: if active()&&(
+    (profile().role in ['master_admin','admin','manager']&&request.resource.data.source=='SecureTrack System'&&request.resource.data.status in ['Draft','Issued']&&(!request.resource.data.keys().hasAny(['tracker_id'])||(request.resource.data.tracker_id is int&&request.resource.data.tracker_id>=151130)))
+    ||(profile().role in ['master_admin','admin']&&request.resource.data.source=='Historical Import'&&request.resource.data.import_key is string)
+   );
+   allow update: if active()&&(
+    (profile().role in ['master_admin','admin']&&resource.data.status!='Issued')
+    ||(profile().role in ['master_admin','owner','admin','manager','accountant']&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['company_name','vehicle_number','chassis_number','device_type','installation_status','payment_status','contact_person','whatsapp_number','email','remarks','service_type','issue_date','active_date','expiry_date','edited_at','edited_by','edited_by_uid'])&&request.resource.data.edited_at==request.time&&request.resource.data.edited_by_uid==request.auth.uid)
+    ||(profile().role in ['master_admin','admin','manager','accountant']&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['installation_status','installation_status_updated_at','installation_status_updated_by','installation_status_updated_by_uid'])&&request.resource.data.installation_status in ['Installed','Not Installed','Uninstalled']&&request.resource.data.installation_status_updated_at==request.time&&request.resource.data.installation_status_updated_by_uid==request.auth.uid)
+    ||(profile().role in ['master_admin','admin','manager','accountant']&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payment_status','payment_status_updated_at','payment_status_updated_by','payment_status_updated_by_uid'])&&request.resource.data.payment_status in ['Paid','Unpaid']&&request.resource.data.payment_status_updated_at==request.time&&request.resource.data.payment_status_updated_by_uid==request.auth.uid)
+    ||(profile().role in ['master_admin','admin']&&!resource.data.get('is_deleted',false)&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_deleted','deleted_at','deleted_by_uid','deleted_by_name','deletion_reason','updated_at'])&&request.resource.data.is_deleted==true&&request.resource.data.deleted_at==request.time&&request.resource.data.deleted_by_uid==request.auth.uid&&request.resource.data.deletion_reason is string&&request.resource.data.deletion_reason.size()>0&&request.resource.data.updated_at==request.time)
+    ||(master()&&resource.data.get('is_deleted',false)&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_deleted','restored_at','restored_by_uid','restored_by_name','updated_at'])&&request.resource.data.is_deleted==false&&request.resource.data.restored_at==request.time&&request.resource.data.restored_by_uid==request.auth.uid&&request.resource.data.updated_at==request.time)
+   );
+   allow delete: if false;
+  }
+  match /certificate_status_history/{id} {
+   allow read: if active()&&profile().role in ['master_admin','owner','admin','manager','accountant'];
+   allow create: if active()&&profile().role in ['master_admin','admin','manager','accountant']&&request.resource.data.changed_by_uid==request.auth.uid&&request.resource.data.changed_at==request.time&&request.resource.data.previous_status is string&&request.resource.data.new_status in ['Installed','Not Installed','Uninstalled'];
+   allow update, delete: if false;
+  }
+  match /certificate_payment_history/{id} {
+   allow read: if active()&&profile().role in ['master_admin','owner','admin','manager','accountant'];
+   allow create: if active()&&profile().role in ['master_admin','admin','manager','accountant']&&request.resource.data.changed_by_uid==request.auth.uid&&request.resource.data.changed_at==request.time&&request.resource.data.previous_status in ['Paid','Unpaid']&&request.resource.data.new_status in ['Paid','Unpaid'];
+   allow update, delete: if false;
+  }
+  match /certificate_edit_history/{id} {
+   allow read: if active()&&profile().role in ['master_admin','owner','admin','manager','accountant'];
+   allow create: if active()&&profile().role in ['master_admin','owner','admin','manager','accountant']&&request.resource.data.changed_by_uid==request.auth.uid&&request.resource.data.changed_at==request.time&&request.resource.data.certificate_id is string&&request.resource.data.previous is map;
+   allow update, delete: if false;
+  }
+  match /error_logs/{id} {
+   allow read: if active()&&profile().role in ['master_admin','admin'];
+   allow create: if active()
+    &&request.resource.data.keys().hasOnly(['severity','message','stack','module','user_uid','request_url','context','created_at'])
+    &&request.resource.data.user_uid==request.auth.uid
+    &&request.resource.data.severity=='error'
+    &&request.resource.data.message is string&&request.resource.data.message.size()<=1000
+    &&request.resource.data.stack is string&&request.resource.data.stack.size()<=6000
+    &&request.resource.data.module is string&&request.resource.data.module.size()<=120
+    &&request.resource.data.request_url is string&&request.resource.data.request_url.size()<=500
+    &&request.resource.data.context is map
+    &&request.resource.data.created_at==request.time;
+   allow update, delete: if false;
+  }
+  match /certificate_settings/{id} {
+   allow read: if active()&&profile().role in ['master_admin','owner','admin','manager','accountant'];
+   allow create, update: if active()&&profile().role in ['master_admin','admin']&&id=='global';
+   allow delete: if false;
+  }
+  match /device_models/{id} {
+   allow read: if staff();
+   allow create: if active()&&profile().role in ['master_admin','admin']&&request.resource.data.name is string&&request.resource.data.name.size()>0&&request.resource.data.status in ['active','inactive','archived'];
+   allow update: if active()&&profile().role in ['master_admin','admin']&&request.resource.data.name is string&&request.resource.data.name.size()>0&&request.resource.data.status in ['active','inactive','archived'];
+   allow delete: if false;
+  }
+  match /renewals/{id} {
+   allow read: if active()&&profile().role in ['master_admin','owner','admin','manager','accountant'];
+   allow create: if active()&&profile().role in ['master_admin','admin','accountant']&&request.resource.data.identity is string&&request.resource.data.identity.size()>0&&request.resource.data.company_name is string&&request.resource.data.company_name.size()>0&&request.resource.data.vehicle_number is string&&request.resource.data.chassis_number is string&&request.resource.data.updated_by_uid==request.auth.uid&&request.resource.data.updated_at==request.time;
+   allow update: if (active()&&profile().role in ['master_admin','admin','accountant']&&request.resource.data.identity==resource.data.identity&&request.resource.data.company_name is string&&request.resource.data.company_name.size()>0&&request.resource.data.vehicle_number is string&&request.resource.data.chassis_number is string&&request.resource.data.updated_by_uid==request.auth.uid&&request.resource.data.updated_at==request.time)
+    ||(master()&&resource.data.get('is_deleted',false)&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_deleted','lifecycle','restored_at','restored_by_uid','restored_by_name','updated_at','updated_by_uid','updated_by_name'])&&request.resource.data.is_deleted==false&&request.resource.data.lifecycle==resource.data.get('previous_lifecycle','Upcoming')&&request.resource.data.restored_at==request.time&&request.resource.data.restored_by_uid==request.auth.uid&&request.resource.data.updated_by_uid==request.auth.uid&&request.resource.data.updated_at==request.time);
+   allow delete: if false;
+  }
+  match /audit_events/{id} {
+   allow read: if master();
+   allow create: if active()&&request.resource.data.actor_uid==request.auth.uid&&request.resource.data.actor_role==profile().role&&request.resource.data.action in ['CREATED','EDITED','ASSIGNED','REASSIGNED','COMPLETED','CANCELLED','DELETED','RESTORED','IMPORTED','EXPORTED','STATUS_CHANGED','PERMISSION_CHANGED']&&request.resource.data.module is string&&request.resource.data.record_id is string&&request.resource.data.changes is map&&request.resource.data.search_tokens is list&&request.resource.data.created_at==request.time;
+   allow update, delete: if false;
+  }
+  match /operational_notifications/{id} {
+   allow read: if staff();
+   allow create: if active()&&request.resource.data.actor_uid==request.auth.uid&&request.resource.data.type in ['vehicle_completed','job_completed']&&request.resource.data.get('recipient_roles',[]) is list&&request.resource.data.read_by==[]&&request.resource.data.created_at==request.time;
+   allow update: if staff()&&request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read_by'])&&request.resource.data.read_by is list&&request.resource.data.read_by.hasAll([request.auth.uid]);
+   allow delete: if false;
   }
   }
 }
