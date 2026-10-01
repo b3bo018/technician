@@ -31,4 +31,4 @@ export async function deleteManagedUser(email:string){return call('/admin/users/
 
 export const EmailAuthProvider={credential:(email:string,password:string)=>({email,password})};
 export async function reauthenticateWithCredential(user:User,credential:{email:string;password:string}){const data=await call('/v1/auth/reauthenticate',credential);if(data?.uid&&data.uid!==user.uid)throw Object.assign(new Error('The current password is incorrect.'),{code:'auth/invalid-credential'});localStorage.setItem('securetrack:reauth-password',credential.password);return{user}}
-export async function updatePassword(_user:User,password:string){const current=localStorage.getItem('securetrack:reauth-password')||'';try{await call('/v1/auth/password',{currentPassword:current,password},'PUT')}finally{localStorage.removeItem('securetrack:reauth-password')}}
+export async function updatePassword(_user:User,password:string){const current=localStorage.getItem('securetrack:reauth-password')||'';try{await call('/v1/auth/password',{email:_user.email,currentPassword:current,password},'PUT')}finally{localStorage.removeItem('securetrack:reauth-password')}}
