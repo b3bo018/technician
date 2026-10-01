@@ -1,5 +1,5 @@
-import { collection, doc, serverTimestamp, type Transaction, type WriteBatch } from 'firebase/firestore';
-import { db } from './firebase';
+import { collection, doc, serverTimestamp, type Transaction, type WriteBatch } from './cloud/store';
+import { db } from './aws';
 import type { Role, Technician } from '../types';
 
 export type AuditAction='CREATED'|'EDITED'|'ASSIGNED'|'REASSIGNED'|'COMPLETED'|'CANCELLED'|'DELETED'|'RESTORED'|'IMPORTED'|'EXPORTED'|'STATUS_CHANGED'|'PAYMENT_STATUS_CHANGED'|'PERMISSION_CHANGED';
