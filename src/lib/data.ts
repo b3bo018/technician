@@ -1,9 +1,7 @@
-import { createUserWithEmailAndPassword, deleteUser, getAuth, inMemoryPersistence, setPersistence, signInWithEmailAndPassword, signOut, updateProfile, User } from 'firebase/auth';
-import { deleteApp, initializeApp } from 'firebase/app';
-import { collection, deleteField, doc, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { createManagedUser, deleteManagedUser, User } from './cloud/auth';
+import { collection, deleteField, doc, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from './cloud/store';
 import localforage from 'localforage';
-import { auth, db } from './firebase';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { auth, db } from './aws';
 import { Attendance, DEVICE_MODELS, emptyStock, Installation, InventoryAccount, Movement, PendingOperation, Role, SIM_PROVIDERS, SIM_STOCK_KEYS, Shift, simStockKey, Stock, StockAlertSettings, Technician, WorkBreak, WorkSession } from '../types';
 import { localToISO, nextDate, openingStock, stockAt, TIME_ZONE, validateOperation } from './domain';
 import { captureLocation } from './location';
@@ -199,6 +197,7 @@ export async function removeManagedAccount(uid:string,actor:AuditActor,reason:st
  batch.delete(doc(db,'technician_live_stock',uid));
  addAuditToBatch(batch,actor,'DELETED','Users',uid,{reason:deletionReason,deleted_record:true,display_name:profile.data().displayName||'',email:profile.data().email||'',history_preserved:true});
  await batch.commit();
+ await deleteManagedUser(String(profile.data().email||'')).catch(()=>{});
 }
 export async function changeProfilePhoto(uid:string,photoDataUrl:string){
  if(photoDataUrl.length>200000)throw new Error('The profile photo is too large. Choose a smaller image.');
@@ -206,21 +205,9 @@ export async function changeProfilePhoto(uid:string,photoDataUrl:string){
 }
 
 export async function createManagedAccount(input:{displayName:string;email:string;password:string;role:Role},actor:AuditActor) {
- const secondary=initializeApp(firebaseConfig,'account-'+crypto.randomUUID()); const secondaryAuth=getAuth(secondary); let created:User|null=null,fresh=false;
- try {
-  await setPersistence(secondaryAuth,inMemoryPersistence);
-  try{created=(await createUserWithEmailAndPassword(secondaryAuth,input.email.trim(),input.password)).user;fresh=true}
-  catch(error:any){
-   if(error?.code!=='auth/email-already-in-use')throw error;
-   try{created=(await signInWithEmailAndPassword(secondaryAuth,input.email.trim(),input.password)).user}
-   catch{throw new Error('This email has an existing login. Enter its current password to restore the account, or use Forgot password on the login page first.')}
-   const existing=await getDoc(doc(db,'users',created.uid));if(existing.exists()&&existing.data().status!=='deactivated')throw new Error('This account is already active. Refresh People & access to view it.');
-  }
-  await updateProfile(created,{displayName:input.displayName.trim()});
-  const batch=writeBatch(db);batch.set(doc(db,'users',created.uid),{uid:created.uid,email:input.email.trim().toLowerCase(),displayName:input.displayName.trim(),photoDataUrl:'',role:input.role,status:'active',inventory_count:0,inventory_breakdown:{fmc920:0,fmc130:0,sim_cards:0},created_at:serverTimestamp()});addAuditToBatch(batch,actor,'CREATED','Users',created.uid,{changes:{role:{old:null,new:input.role}}});await batch.commit();
-  await signOut(secondaryAuth); return created.uid;
- } catch(e) { if(created&&fresh) await deleteUser(created).catch(()=>{}); throw e; }
- finally { await deleteApp(secondary).catch(()=>{}); }
+ const created=await createManagedUser(input);const uid=created.uid;
+ try{const batch=writeBatch(db);batch.set(doc(db,'users',uid),{uid,email:input.email.trim().toLowerCase(),displayName:input.displayName.trim(),photoDataUrl:'',role:input.role,status:'active',inventory_count:0,inventory_breakdown:{fmc920:0,fmc130:0,sim_cards:0},created_at:serverTimestamp()});addAuditToBatch(batch,actor,'CREATED','Users',uid,{changes:{role:{old:null,new:input.role}}});await batch.commit();return uid}
+ catch(error){await deleteManagedUser(input.email.trim().toLowerCase()).catch(()=>{});throw error}
 }
 export async function legacyQueueCount() {
   const old = localforage.createInstance({ name: 'SecureTrackPWA', storeName: 'installation_queue' });
