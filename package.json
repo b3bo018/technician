@@ -11,7 +11,8 @@
     "test": "tsx --test tests/domain.test.ts tests/excel.test.ts",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
-    "server:build": "npm --prefix server run build"
+    "server:build": "npm --prefix server run build",
+    "check:firebase": "node scripts/check-no-firebase.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
