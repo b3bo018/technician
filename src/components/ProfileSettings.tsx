@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Bell, Camera, Check, KeyRound, LogOut, Settings } from 'lucide-react';
-import { EmailAuthProvider, reauthenticateWithCredential, signOut, updatePassword } from 'firebase/auth';
+import { EmailAuthProvider, reauthenticateWithCredential, signOut, updatePassword } from '../lib/cloud/auth';
 import { Technician } from '../types';
-import { auth } from '../lib/firebase';
+import { auth } from '../lib/aws';
 import { changeProfilePhoto } from '../lib/data';
 import { prepareProfilePhoto } from '../lib/photo';
 import { notificationState, notificationsMuted, readNotificationState, requestNotifications, setNotificationsMuted } from '../lib/notifications';
