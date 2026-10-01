@@ -1,0 +1,3 @@
+CREATE TABLE IF NOT EXISTS documents (collection text NOT NULL,id text NOT NULL,data jsonb NOT NULL DEFAULT '{}'::jsonb,version bigint NOT NULL DEFAULT 1,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY (collection,id));
+CREATE INDEX IF NOT EXISTS documents_collection_idx ON documents(collection);
+CREATE INDEX IF NOT EXISTS documents_data_gin_idx ON documents USING gin(data jsonb_path_ops);
