@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { arrayUnion, collection, doc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { arrayUnion, collection, doc, limit, onSnapshot, orderBy, query, updateDoc } from '../lib/cloud/store';
 import { Bell, CheckCheck, X } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 import type { Technician } from '../types';
 import type { AdminSection } from './AdminDashboard';
 
