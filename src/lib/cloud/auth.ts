@@ -28,3 +28,7 @@ export async function signOut(_auth:any){try{if(session)await call('/v1/auth/log
 export async function sendPasswordResetEmail(_auth:any,email:string){await call('/v1/auth/forgot-password',{email})}
 export async function createManagedUser(input:{displayName:string;email:string;password:string;role:string}){return call('/admin/users',{...input})}
 export async function deleteManagedUser(email:string){return call('/admin/users/'+encodeURIComponent(email),{},'DELETE')}
+
+export const EmailAuthProvider={credential:(email:string,password:string)=>({email,password})};
+export async function reauthenticateWithCredential(user:User,credential:{email:string;password:string}){const data=await call('/v1/auth/reauthenticate',credential);if(data?.uid&&data.uid!==user.uid)throw Object.assign(new Error('The current password is incorrect.'),{code:'auth/invalid-credential'});return{user}}
+export async function updatePassword(_user:User,password:string){await call('/v1/auth/password',{password},'PUT')}
