@@ -1,30 +1,30 @@
-const region = import.meta.env.VITE_AWS_REGION || 'me-central-1';
-const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID || '';
-const endpoint = `https://cognito-idp.${region}.amazonaws.com/`;
-const storageKey = 'securetrack.aws.session.v1';
-export interface User { uid:string; email:string|null; displayName:string|null; metadata:{lastSignInTime:string} }
-type Session={user:User;idToken:string;accessToken:string;refreshToken?:string;expiresAt:number}; type Auth={currentUser:User|null};
-export const auth:Auth={currentUser:null}; const listeners=new Set<(user:User|null)=>void>(); let session:Session|null=null,lastPassword='';
-function assertConfigured(){if(!clientId)throw new Error('AWS Cognito is not configured. Set VITE_COGNITO_CLIENT_ID.');}
-async function cognito(action:string,body:any){assertConfigured();const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/x-amz-json-1.0','x-amz-target':`AWSCognitoIdentityProviderService.${action}`},body:JSON.stringify(body)});const data=await response.json().catch(()=>({}));if(!response.ok){const error:any=new Error(data.message||data.Message||`${action} failed.`);error.code=String(data.__type||'').split('#').pop()||'CognitoError';throw error}return data}
-function decode(token:string):Record<string,any>{const payload=token.split('.')[1];if(!payload)throw new Error('Invalid Cognito token.');const normalized=payload.replace(/-/g,'+').replace(/_/g,'/');const json=decodeURIComponent(atob(normalized).split('').map(c=>'%'+c.charCodeAt(0).toString(16).padStart(2,'0')).join(''));return JSON.parse(json)}
-function userFromToken(idToken:string):User{const claims=decode(idToken);return{uid:String(claims.sub||''),email:claims.email?String(claims.email):null,displayName:claims.name?String(claims.name):null,metadata:{lastSignInTime:new Date().toISOString()}}}
-function save(next:Session|null){session=next;auth.currentUser=next?.user||null;if(next)localStorage.setItem(storageKey,JSON.stringify(next));else localStorage.removeItem(storageKey);listeners.forEach(listener=>listener(auth.currentUser))}
-try{const raw=localStorage.getItem(storageKey);if(raw){const parsed=JSON.parse(raw) as Session;if(parsed?.user?.uid&&parsed.idToken&&parsed.accessToken){session=parsed;auth.currentUser=parsed.user}}}catch{localStorage.removeItem(storageKey)}
-async function refreshSession(){if(!session?.refreshToken)throw new Error('Your session expired. Sign in again.');const result=await cognito('InitiateAuth',{ClientId:clientId,AuthFlow:'REFRESH_TOKEN_AUTH',AuthParameters:{REFRESH_TOKEN:session.refreshToken}}),tokens=result.AuthenticationResult;if(!tokens?.IdToken||!tokens.AccessToken)throw new Error('Unable to refresh the session.');save({...session,idToken:tokens.IdToken,accessToken:tokens.AccessToken,expiresAt:Date.now()+(tokens.ExpiresIn||3600)*1000})}
-export async function getIdToken(){if(!session)throw new Error('Sign in required.');if(session.expiresAt<Date.now()+60000)await refreshSession();return session!.idToken}
-export async function getAccessToken(){if(!session)throw new Error('Sign in required.');if(session.expiresAt<Date.now()+60000)await refreshSession();return session!.accessToken}
-export function onAuthStateChanged(_auth:Auth,callback:(user:User|null)=>void){listeners.add(callback);queueMicrotask(()=>callback(auth.currentUser));return()=>listeners.delete(callback)}
-export async function signInWithEmailAndPassword(_auth:Auth,email:string,password:string){const result=await cognito('InitiateAuth',{ClientId:clientId,AuthFlow:'USER_PASSWORD_AUTH',AuthParameters:{USERNAME:email.trim().toLowerCase(),PASSWORD:password}});if(result.ChallengeName)throw new Error(`Additional sign-in challenge required: ${result.ChallengeName}`);const tokens=result.AuthenticationResult;if(!tokens?.IdToken||!tokens.AccessToken)throw new Error('Cognito did not return a session.');const next:Session={user:userFromToken(tokens.IdToken),idToken:tokens.IdToken,accessToken:tokens.AccessToken,refreshToken:tokens.RefreshToken,expiresAt:Date.now()+(tokens.ExpiresIn||3600)*1000};lastPassword=password;save(next);return{user:next.user}}
-export async function signOut(_auth:Auth){try{if(session?.accessToken)await cognito('GlobalSignOut',{AccessToken:session.accessToken})}catch{}lastPassword='';save(null)}
-export async function sendPasswordResetEmail(_auth:Auth,email:string){await cognito('ForgotPassword',{ClientId:clientId,Username:email.trim().toLowerCase()})}
-export async function confirmPasswordReset(email:string,code:string,password:string){await cognito('ConfirmForgotPassword',{ClientId:clientId,Username:email.trim().toLowerCase(),ConfirmationCode:code.trim(),Password:password})}
-export const EmailAuthProvider={credential:(email:string,password:string)=>({email,password})};
-export async function reauthenticateWithCredential(user:User,credential:{email:string;password:string}){const result=await signInWithEmailAndPassword(auth,credential.email,credential.password);if(result.user.uid!==user.uid)throw new Error('The current password does not match this account.');lastPassword=credential.password;return result}
-export async function updatePassword(_user:User,password:string){if(!lastPassword)throw new Error('Re-enter your current password before changing it.');await cognito('ChangePassword',{AccessToken:await getAccessToken(),PreviousPassword:lastPassword,ProposedPassword:password});lastPassword=password}
-export async function updateProfile(user:User,input:{displayName?:string|null}){user.displayName=input.displayName??user.displayName;if(session?.user.uid===user.uid)save({...session,user:{...user}})}
-export const inMemoryPersistence={}; export async function setPersistence(){return} export function getAuth(){return auth}
-const API_BASE=(import.meta.env.VITE_API_URL||'/api').replace(/\/$/,'');
-async function adminRequest(path:string,init:RequestInit){const response=await fetch(API_BASE+path,{...init,headers:{'content-type':'application/json',authorization:`Bearer ${await getIdToken()}`,...(init.headers||{})}});const body=response.status===204?{}:await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.message||'Account operation failed.');return body}
-export async function createManagedUser(input:{displayName:string;email:string;password:string;role:string}){return adminRequest('/admin/users',{method:'POST',body:JSON.stringify(input)}) as Promise<{uid:string}>}
-export async function deleteManagedUser(username:string){await adminRequest(`/admin/users/${encodeURIComponent(username)}`,{method:'DELETE'})}
+import { setTokenProvider } from './store';
+
+export type User={uid:string;email:string|null;displayName:string|null;metadata:{lastSignInTime:string}};
+type AuthListener=(user:User|null)=>void;
+type Session={user:User;accessToken:string;refreshToken?:string;expiresAt:number};
+const API=(import.meta.env.VITE_API_URL||'').replace(/\/$/,'');
+const listeners=new Set<AuthListener>();
+let session:Session|null=null;
+const key='securetrack:aws-session';
+function notify(){for(const listener of listeners)listener(session?.user||null)}
+function load(){try{const raw=localStorage.getItem(key);session=raw?JSON.parse(raw):null}catch{session=null}}
+function save(next:Session|null){session=next;if(next)localStorage.setItem(key,JSON.stringify(next));else localStorage.removeItem(key);notify()}
+load();
+async function call(path:string,body:any){
+ const response=await fetch(API+path,{method:'POST',headers:{'content-type':'application/json',...(session?.accessToken?{authorization:'Bearer '+session.accessToken}:{})},body:JSON.stringify(body)});
+ const data=await response.json().catch(()=>({}));if(!response.ok){const e:any=new Error(data.message||'Authentication failed');e.code=data.code||String(response.status);throw e}return data;
+}
+async function refresh(){
+ if(!session?.refreshToken)return session?.accessToken||null;
+ if(session.expiresAt>Date.now()+60000)return session.accessToken;
+ const data=await call('/v1/auth/refresh',{refreshToken:session.refreshToken});save({...session,accessToken:data.accessToken,expiresAt:Date.now()+Number(data.expiresIn||3600)*1000});return session!.accessToken;
+}
+setTokenProvider(refresh);
+export const auth={get currentUser(){return session?.user||null}};
+export function onAuthStateChanged(_auth:any,listener:AuthListener){listeners.add(listener);queueMicrotask(()=>listener(session?.user||null));return()=>listeners.delete(listener)}
+export async function signInWithEmailAndPassword(_auth:any,email:string,password:string){const data=await call('/v1/auth/login',{email,password});save({user:data.user,accessToken:data.accessToken,refreshToken:data.refreshToken,expiresAt:Date.now()+Number(data.expiresIn||3600)*1000});return{user:data.user}}
+export async function signOut(_auth:any){try{if(session)await call('/v1/auth/logout',{})}finally{save(null)}}
+export async function sendPasswordResetEmail(_auth:any,email:string){await call('/v1/auth/forgot-password',{email})}
+export async function createManagedUser(input:{displayName:string;email:string;password:string;role:string}){return call('/v1/admin/users',{...input})}
+export async function deleteManagedUser(email:string){return call('/v1/admin/users/delete',{email})}
