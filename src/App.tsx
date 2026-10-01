@@ -1,8 +1,8 @@
 import { LoginLocation } from './components/LoginLocation';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, User } from './lib/cloud/auth';
 import { ArrowLeft, BarChart3, BriefcaseBusiness, CalendarCheck, CalendarPlus, CarFront, ChevronDown, CircleDollarSign, ClipboardList, Cpu, FileCheck2, FilePenLine, Gauge, LayoutDashboard, LogOut, MapPin, Package, PackagePlus, RefreshCw, Settings as SettingsIcon, ShieldCheck, UserRound, Users, Wifi, WifiOff, Wrench } from 'lucide-react';
-import { auth } from './lib/firebase';
+import { auth } from './lib/aws';
 import { Capacitor } from '@capacitor/core';
 import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, PendingOperation, Shift, StockAlertSettings, Technician, WorkBreak, WorkSession, roleLabel } from './types';
 import { carryForwardOverdueJobs, commitOperation, ensureInventory, ensureProfile, legacyQueueCount, mapAccount, mapAttendance, mapInstallation, mapMovement, mapShift, mapWorkBreak, mapWorkSession, observe, observeProfile, observeStockAlertSettings, pending, queueOperation, saveStockAlertThreshold, syncOperations } from './lib/data';
