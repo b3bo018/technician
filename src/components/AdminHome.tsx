@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot } from '../lib/cloud/store';
 import { AlertTriangle, CalendarPlus, CarFront, CheckCircle2, Clock3, Cpu, PackagePlus, Radio, UserRoundCheck, Wrench } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 import { dayKey, displayTime, TIME_ZONE } from '../lib/domain';
 import { notificationSeen, rememberNotification, sendAppNotification } from '../lib/notifications';
 import type { AdminSection } from './AdminDashboard';
