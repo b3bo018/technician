@@ -1,3 +1,4 @@
+import { needsCarryForward } from './lib/carryForward';
 import { LoginLocation } from './components/LoginLocation';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
@@ -35,7 +36,7 @@ export default function App() {
  const [mobileNavHidden,setMobileNavHidden]=useState(false);
  const [accountMenuOpen,setAccountMenuOpen]=useState(false);
  const accountMenuRef=useRef<HTMLDivElement|null>(null);
- const carryForwardRun=useRef('');
+ const carryForwardRun=useRef(''); const carryForwardBusy=useRef(false); const [carryNotice,setCarryNotice]=useState(''); const [carryRetry,setCarryRetry]=useState(0);
  const isStaff = !!profile && profile.role !== 'technician'; const isNative=Capacitor.isNativePlatform();const platformClass=Capacitor.getPlatform()==='android'?'platform-android':'platform-web';
  const adminNav=profile?[...(['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'dashboard' as AdminSection,label:'Overview',icon:LayoutDashboard,group:'Dashboard'}]:[]),{id:'jobs' as AdminSection,label:'Jobs',icon:BriefcaseBusiness,group:'Operations'},...(['master_admin','admin'].includes(profile.role)?[{id:'assign' as AdminSection,label:'Schedule / Add job',icon:CalendarPlus,group:'Operations'}]:[]),...(['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'completed' as AdminSection,label:'Vehicle online verification',icon:ClipboardList,group:'Operations'}]:[]),...(!isNative&&['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'vehicle-search' as AdminSection,label:'Vehicle & company search',icon:CarFront,group:'Vehicles & Customers'}]:[]),...(['master_admin','owner','admin','manager','accountant'].includes(profile.role)?[{id:'control-center' as AdminSection,label:'Renewal control center',icon:CircleDollarSign,group:'Vehicles & Customers'},{id:'renewals' as AdminSection,label:'Sales renewal import',icon:CircleDollarSign,group:'Sales'}]:[]),...(profile.role!=='hr'?[{id:'inventory' as AdminSection,label:'Device & SIM inventory',icon:PackagePlus,group:'Inventory'}]:[]),...(['master_admin','admin','accountant'].includes(profile.role)?[{id:'stock' as AdminSection,label:'Issue stock',icon:PackagePlus,group:'Inventory'}]:[]),...(['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'workforce' as AdminSection,label:'Attendance',icon:CalendarCheck,group:'Team'}]:[]),...(profile.role==='master_admin'?[{id:'people' as AdminSection,label:'Technicians & users',icon:Users,group:'Team'}]:[]),...(['master_admin','owner','admin','accountant','hr'].includes(profile.role)?[{id:'agreements' as AdminSection,label:'Agreements',icon:FilePenLine,group:'Documents'}]:[]),...(['master_admin','owner','admin','manager','accountant'].includes(profile.role)?[{id:'certificates' as AdminSection,label:'Certificates',icon:FileCheck2,group:'Documents'}]:[]),...(['master_admin','owner','admin','hr'].includes(profile.role)?[{id:'performance' as AdminSection,label:'Performance',icon:Gauge,group:'Reports'}]:[]),...(['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'reports' as AdminSection,label:'Reports & exports',icon:BarChart3,group:'Reports'}]:[]),...(profile.role==='master_admin'?[{id:'audit' as AdminSection,label:'Audit history',icon:ShieldCheck,group:'Audit'}]:[]),...(['master_admin','admin'].includes(profile.role)?[{id:'devices' as AdminSection,label:'Device types',icon:Cpu,group:'Admin / Settings'}]:[]),...(['master_admin','owner','admin','manager','accountant','hr'].includes(profile.role)?[{id:'settings' as AdminSection,label:'Settings',icon:SettingsIcon,group:'Admin / Settings'}]:[])]:[];
  const adminGroups=[...new Set(adminNav.map(item=>item.group))];
@@ -100,7 +101,17 @@ export default function App() {
   throw new Error('Connect to the internet to complete this job. The entry is safely queued and can be submitted with Sync now.');
  }
  const allInstallations=Array.from(new Map([...installations,...legacy].map(i=>[i.id,i])).values()).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
- useEffect(()=>{if(!profile||isNative||!['master_admin','admin'].includes(profile.role))return;const currentDay=dayKey(new Date()),overdue=shifts.filter(shift=>shift.date<currentDay&&shift.status!=='completed'&&(shift.completed_units||0)<shift.unit_count);if(!overdue.length)return;const key=currentDay+':'+overdue.map(item=>`${item.id}:${item.date}`).sort().join('|');if(carryForwardRun.current===key)return;carryForwardRun.current=key;void carryForwardOverdueJobs(shifts,allInstallations,currentDay,profile).catch(error=>setError('Carry-forward needs attention: '+error.message))},[profile?.uid,profile?.role,isNative,shifts,installations,legacy]);
+ useEffect(()=>{
+  if(!profile||isNative||!['master_admin','admin'].includes(profile.role)||!online||carryForwardBusy.current)return;
+  const currentDay=dayKey(new Date());
+  if(!shifts.some(shift=>needsCarryForward(shift,currentDay))){setCarryNotice('');return}
+  const key=profile.uid+':'+currentDay+':'+shifts.map(item=>`${item.id}:${item.date}:${item.status}:${item.version}:${item.completed_units}:${item.is_deleted}`).sort().join('|');
+  if(carryForwardRun.current===key)return;
+  carryForwardRun.current=key;carryForwardBusy.current=true;
+  void carryForwardOverdueJobs(shifts,allInstallations,currentDay,profile).then(result=>{
+   setCarryNotice(result.conflicts.length?'Needs rescheduling: '+result.conflicts.slice(0,3).map(item=>`${item.job} overlaps ${item.conflictingJob} on ${item.date}`).join('; ')+(result.conflicts.length>3?`; and ${result.conflicts.length-3} more`:'')+'. These jobs remain pending; other available jobs were carried forward.':'');
+  }).catch(error=>setCarryNotice('Automatic carry-forward could not finish. Pending jobs are preserved. '+error.message)).finally(()=>{carryForwardBusy.current=false;setCarryRetry(value=>value+1)});
+ },[profile?.uid,profile?.role,isNative,shifts,installations,legacy,online,carryRetry]);
  const ownInstallations=allInstallations.filter(i=>i.technician_id===user?.uid);
  const ownMoves=movements.filter(m=>m.technician_id===user?.uid).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
  const stock=stockAt(accounts.find(a=>a.technician_id===user?.uid),ownMoves);
@@ -123,6 +134,7 @@ export default function App() {
  <main className="workspace"><div className={'mobile-nav '+(mobileNavHidden?'hidden':'')}>{(isStaff?adminNav:nav).map(n=><button key={n.id} onClick={()=>{if(isStaff)goAdmin(n.id as AdminSection);else setTab(n.id as Tab)}} className={(isStaff?adminSection===n.id:tab===n.id)?'active':''}><n.icon size={17}/><span>{n.label}</span></button>)}</div>
  {!isStaff && locationSession!==sessionKey && <LoginLocation key={sessionKey} user={user} onComplete={()=>setLocationSession(sessionKey)}/>}
  {error&&<div className="notice error" role="alert">{error}<button onClick={sync} disabled={syncing}>Retry sync</button></div>}
+ {carryNotice&&isStaff&&<div className="notice warning" role="status"><span>{carryNotice}</span><button onClick={()=>goAdmin('jobs')}>Review jobs</button><button onClick={()=>{carryForwardRun.current='';setCarryRetry(value=>value+1)}}>Retry carry-forward</button></div>}
  {oldPending>0&&<div className="notice warning">This browser has {oldPending} unsynced entries from the previous app. They remain preserved. Ask an administrator to reconcile them before using the new stock balances.</div>}
  {queue.length>0&&<div className="notice warning"><RefreshCw size={16}/>{queue.length} entries awaiting cloud confirmation. Stock below shows confirmed entries only.<button disabled={!online||syncing} onClick={sync}>{syncing?'Syncing…':'Sync now'}</button></div>}
  <PwaInstallPrompt canInstallPrompt={!!prompt} onInstall={async()=>{await prompt?.prompt();setPrompt(null);}}/>
@@ -139,8 +151,3 @@ export default function App() {
  </main></div></div>;
 }
 function BootScreen({message='Starting SecureTrack…'}:{message?:string}){return <div className="app-boot"><div className="boot-map"><i/><i/><i/></div><img src="/securetrack-logo.png" alt="SecureTrack"/><div className="boot-pin"><span/></div><strong>SECURETRACK</strong><small>{message}</small></div>}
-
-
-
-
-

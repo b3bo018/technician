@@ -83,3 +83,7 @@ Firebase Authentication, Cloud Firestore, Firebase Hosting, WhatsApp web links, 
 - Current per-vehicle completion, inventory, permissions, mixed-work, protected error-log, audit, scheduling, renewal and notification rules must pass the Firestore emulator suite before deployment. Legacy aggregate completion branches remain only for compatibility and should not be expanded.
 - The main production JavaScript bundle is about 2.95 MB before compression. It builds successfully, but future maintenance should split large document and spreadsheet features into lazy-loaded chunks to improve first load on slower mobile devices.
 - Automated Firestore backups remain disabled until billing is enabled by the owner.
+
+## 2 October 2026 — carry-forward reservation fix
+
+Completed, cancelled, deleted, draft and reassigned job reservations are checked against their current job records before they can block automatic carry-forward. ST00063 was confirmed completed while its reservation still existed. A real scheduling conflict leaves the affected job pending and continues other jobs, with a separate Review jobs / Retry carry-forward notice. Original job IDs, completion records and schedule history are preserved. The live Firebase correction is separate from the unfinished AWS migration preview.

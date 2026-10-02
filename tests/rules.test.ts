@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { confirmJobArrival } from '../src/lib/arrival';
+import { carryForwardJobs } from '../src/lib/carryForward';
 import test,{before,beforeEach,after}from'node:test';
 import{readFileSync}from'node:fs';
 import{initializeTestEnvironment,assertFails,assertSucceeds,RulesTestEnvironment}from'@firebase/rules-unit-testing';
@@ -72,4 +73,35 @@ test('arrival rejects cancelled, completed, deleted and out-of-window jobs',asyn
  await env.withSecurityRulesDisabled(async c=>{await setDoc(doc(c.firestore(),'shifts','deleted-arrival'),{...shift(),is_deleted:true});await setDoc(doc(c.firestore(),'shifts','future-arrival'),{...shift(),window_start:Timestamp.fromMillis(Date.now()+3600000),window_end:Timestamp.fromMillis(Date.now()+7200000)})});
  await assert.rejects(confirmJobArrival(db() as any,'tech-a','deleted-arrival',gps),/no longer open/);
  await assertFails(confirmJobArrival(db() as any,'tech-a','future-arrival',gps));
+});
+
+test('carry-forward ignores a completed job reservation and preserves its recorded work',async()=>{
+ const target:any={...shift(),id:'carry-a',date:'2026-09-30',scheduled_at:Timestamp.fromDate(new Date('2026-09-30T05:00:00Z')),duration_minutes:60,job_reference:'ST00070'};
+ const completed={...shift(),date:'2026-10-01',status:'completed',completed_units:1,completed_at:Timestamp.fromDate(new Date('2026-10-01T06:00:00Z')),job_reference:'ST00063'};
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'shifts','carry-a'),target);await setDoc(doc(d,'shifts','stale'),completed);await setDoc(doc(d,'schedule_locks','tech-a_2026-10-01'),{technician_id:'tech-a',date:'2026-10-01',entries:{stale:{job_reference:'ST00063',start_at:'2026-10-01T05:00:00Z',end_at:'2026-10-01T06:00:00Z'}},updated_at:Timestamp.now()})});
+ const result=await carryForwardJobs(db('admin') as any,[target],'2026-10-01',user('admin','admin') as any,()=>{});
+ assert.equal(result.moved,1);assert.deepEqual(result.conflicts,[]);
+ assert.equal((await getDoc(doc(db('admin'),'shifts','carry-a'))).data()?.date,'2026-10-01');
+ assert.equal((await getDoc(doc(db('admin'),'shifts','stale'))).data()?.completed_at.toMillis(),completed.completed_at.toMillis());
+ const entries=(await getDoc(doc(db('admin'),'schedule_locks','tech-a_2026-10-01'))).data()?.entries;
+ assert.ok(entries['carry-a']);assert.equal(entries.stale,undefined);
+ assert.ok((await getDoc(doc(db('admin'),'job_schedule_history','carry-a_2026-10-01'))).exists());
+ const retry=await carryForwardJobs(db('admin') as any,[target],'2026-10-01',user('admin','admin') as any,()=>{});assert.equal(retry.moved,0);
+});
+
+test('a genuine carry-forward conflict leaves that job pending and continues other jobs',async()=>{
+ const first:any={...shift(),id:'blocked',date:'2026-09-30',scheduled_at:Timestamp.fromDate(new Date('2026-09-30T05:00:00Z')),duration_minutes:60,job_reference:'ST00070'};
+ const second:any={...first,id:'available',scheduled_at:Timestamp.fromDate(new Date('2026-09-30T07:00:00Z')),job_reference:'ST00071'};
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'shifts','blocked'),first);await setDoc(doc(d,'shifts','available'),second);await setDoc(doc(d,'shifts','active'),{...shift(),date:'2026-10-01',job_reference:'ST00063'});await setDoc(doc(d,'schedule_locks','tech-a_2026-10-01'),{technician_id:'tech-a',date:'2026-10-01',entries:{active:{job_reference:'ST00063',start_at:'2026-10-01T05:00:00Z',end_at:'2026-10-01T06:00:00Z'}},updated_at:Timestamp.now()})});
+ const result=await carryForwardJobs(db('admin') as any,[first,second],'2026-10-01',user('admin','admin') as any,()=>{});
+ assert.equal(result.moved,1);assert.deepEqual(result.conflicts,[{job:'ST00070',conflictingJob:'ST00063',date:'2026-10-01'}]);
+ assert.equal((await getDoc(doc(db('admin'),'shifts','blocked'))).data()?.date,'2026-09-30');
+ assert.equal((await getDoc(doc(db('admin'),'shifts','available'))).data()?.date,'2026-10-01');
+});
+
+test('carry-forward excludes drafts, cancelled/deleted jobs and fresh completion despite stale input',async()=>{
+ const inputs:any[]=[];
+ await env.withSecurityRulesDisabled(async c=>{for(const status of ['draft','cancelled','completed','deleted','units-finished']){const input:any={...shift(),id:status,date:'2026-09-30',scheduled_at:Timestamp.fromDate(new Date('2026-09-30T05:00:00Z'))};inputs.push(input);await setDoc(doc(c.firestore(),'shifts',status),{...input,status:['deleted','units-finished'].includes(status)?'assigned':status,is_deleted:status==='deleted',completed_units:status==='units-finished'?1:0})}});
+ const result=await carryForwardJobs(db('admin') as any,inputs,'2026-10-01',user('admin','admin') as any,()=>{});
+ assert.deepEqual(result,{moved:0,conflicts:[]});
 });
