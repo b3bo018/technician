@@ -23,7 +23,7 @@ export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;compa
   <section className="exact-totals"><span><span>Sub-Total</span><b>AED {money(subtotal)}</b></span><span><span>VAT ({Number(a.vat)||0}%)</span><b>AED {money(vatAmount)}</b></span><strong><span>Grand Total</span><b>AED {money(total)}</b></strong></section>
   <section className="exact-terms"><h2>T E R M S</h2><div>{terms.map((term:string,index:number)=><p key={index}>{term}</p>)}</div>{a.payment_terms&&<p className="exact-payment"><b>Payment terms:</b> {a.payment_terms}</p>}</section>
   <section className="exact-signatures">
-   <div className="exact-company-sign"><b>Head of sales: {c.signatory||'Abdulla'}</b><span>Mob: +971 555846686</span><img src="/securetrack-authorized-signature.jpg" alt="Authorized signature"/><strong>For SECURETRACK</strong></div>
+   <div className="exact-company-sign"><b>Head of sales: {c.signatory||'Abdulla'}</b><span>Mob: +971 555846686</span><img src="/securetrack-authorized-signature-v2.jpg" alt="Authorized signature"/><strong>For SECURETRACK</strong></div>
    <img className="exact-stamp" src="/securetrack-company-stamp.jpg" alt="SecureTrack company stamp"/>
    <div className="exact-client-sign"><b>Name : <span>{a.signer_name||''}</span></b><b>Designation: <span>{a.signer_designation||''}</span></b><b>Contact No: <span>{a.signer_mobile||''}</span></b><b>Signature :</b>{a.signature?<img src={a.signature} alt="Customer signature"/>:<i/>}</div>
   </section>
