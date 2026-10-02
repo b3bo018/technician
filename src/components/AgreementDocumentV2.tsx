@@ -10,7 +10,7 @@ export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;compa
  ].filter(row=>Number(row[3])>0);
  const calculatedSubtotal=(Number(a.quantity)||1)*(Number(a.unit_price)||0)+(Number(a.device)||0)+(Number(a.sim)||0)+(Number(a.installation)||0)+(Number(a.certificate)||0)+(Number(a.other)||0)-(Number(a.discount)||0);
  const subtotal=a.subtotal===undefined?calculatedSubtotal:Number(a.subtotal)||0,vatAmount=a.vat_amount===undefined?subtotal*(Number(a.vat)||0)/100:Number(a.vat_amount)||0,total=a.total===undefined?subtotal+vatAmount:Number(a.total)||0;
- const terms=String(a.terms||c.terms||'').split(/\r?\n/).map((line:string)=>line.trim().replace(/^\d+[.)]\s*/,'' )).filter(Boolean);
+ const terms=String(a.terms||c.terms||'').split(/\r?\n/).map((line:string)=>line.trim()).filter(Boolean);
  return <article id={a.reference} className="contract-sheet exact-agreement">
   <header className="exact-agreement-head"><img src="/securetrack-logo-document-hd.png" alt="SecureTrack X"/><div className="exact-document-titles"><strong>QUOTATION</strong><span>AGREEMENT</span></div></header>
   <div className="exact-contact-band"><span>☎ +971 45511700&nbsp;&nbsp;&nbsp; ● +971 521001690, +971 521001699</span><span>✉ {c.internal_email||'business@securetrackx.com'}</span></div>
