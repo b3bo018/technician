@@ -255,3 +255,61 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(max-width:1000px){.control-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.control-detail-grid{grid-template-columns:1fr}.control-hero{align-items:flex-start;flex-direction:column}.control-source-actions{width:100%}.control-source-actions button{flex:1}}
 @media(max-width:560px){.control-summary{grid-template-columns:1fr 1fr}.control-metric{min-height:98px;padding:13px}.control-metric strong{font-size:25px}.control-source-actions{flex-direction:column}.control-detail-grid p{grid-template-columns:1fr}.control-table{min-width:980px}}
 .notification-tabs{display:flex;gap:7px;padding:0 4px 9px}.notification-tabs button{display:flex;align-items:center;gap:6px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;color:#5f7468;background:#fff;font-size:10px;font-weight:800}.notification-tabs button.active{border-color:#1d7047;color:#fff;background:#1d7047}.notification-tabs span{display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:rgba(255,255,255,.22)}.notification-group>span{display:block;padding:9px 12px 5px;color:#75867c;font-size:8px;font-weight:850;letter-spacing:.1em;text-transform:uppercase}.notification-item b{font-size:10px;color:#24553a}.notification-item>svg{width:16px;flex:0 0 auto;color:#438161}
+
+
+/* Agreement phone experience: keep the shared document readable instead of
+   shrinking an A4 sheet into unreadable viewport-sized text. */
+@media (max-width:700px){
+ .public-agreement{width:100%;max-width:none;min-height:100dvh;padding:0 0 28px;background:#f1f6f3;overflow-x:hidden}
+ .public-agreement>.exact-agreement{width:100%;max-width:none;min-height:0;aspect-ratio:auto;margin:0;padding:0 16px 24px;overflow:visible;box-shadow:none}
+ .public-agreement>.exact-agreement:before{left:18%;right:12%;top:38%;height:28%;background-size:contain}
+ .public-agreement .exact-agreement-head{height:118px}
+ .public-agreement .exact-agreement-head>img{top:-52px;left:-12px;width:190px;height:190px}
+ .public-agreement .exact-agreement-head>.exact-document-titles{top:38px;right:0;width:auto;align-items:flex-end}
+ .public-agreement .exact-document-titles strong{font-size:27px;letter-spacing:0}
+ .public-agreement .exact-document-titles span{margin-top:5px;font-size:16px}
+ .public-agreement .exact-contact-band{height:auto;min-height:54px;margin:0 -16px;grid-template-columns:1fr;font-size:12px;background:#080808}
+ .public-agreement .exact-contact-band span:first-child,.public-agreement .exact-contact-band span:last-child{min-height:42px;padding:10px 16px}
+ .public-agreement .exact-contact-band span:last-child{background:linear-gradient(105deg,#c7192c 0 88%,#188a4d 88%)}
+ .public-agreement .exact-recipient{height:auto;margin:22px 0 0;grid-template-columns:1fr;gap:16px;padding:0;font-size:13px;line-height:1.55}
+ .public-agreement .exact-recipient>div:last-child{padding:14px;border-radius:12px;background:#f5f7f6}
+ .public-agreement .exact-commercial{margin-top:22px;overflow-x:auto;border:1px solid #d5ddd8;border-radius:12px}
+ .public-agreement .exact-commercial table{min-width:610px;font-size:12px}
+ .public-agreement .exact-commercial th{font-size:11px}
+ .public-agreement .exact-commercial th,.public-agreement .exact-commercial td{padding:9px 8px}
+ .public-agreement .exact-commercial td small{font-size:10px;line-height:1.4}
+ .public-agreement .exact-totals{width:100%;margin:14px 0 0;font-size:13px}
+ .public-agreement .exact-totals>span,.public-agreement .exact-totals>strong{padding:7px 2px}
+ .public-agreement .exact-terms{margin-top:24px;font-size:12px}
+ .public-agreement .exact-terms h2{margin-bottom:14px;font-size:12px;letter-spacing:5px}
+ .public-agreement .exact-terms p{margin-bottom:8px;line-height:1.5}
+ .public-agreement .exact-signatures{grid-template-columns:1fr;gap:18px;min-height:0;margin-top:28px;font-size:13px}
+ .public-agreement .exact-company-sign,.public-agreement .exact-client-sign{padding:14px;border:1px solid #dce4df;border-radius:12px}
+ .public-agreement .exact-company-sign img{width:160px;height:55px}
+ .public-agreement .exact-stamp{width:110px;height:110px;justify-self:center}
+ .public-agreement .exact-client-sign{min-height:160px}
+ .public-agreement .exact-client-sign img{width:180px;height:70px}
+ .public-agreement .signature-form{margin:14px 10px 0;padding:18px 14px;border-radius:16px;box-shadow:0 12px 35px rgba(20,64,40,.08)}
+ .public-agreement .signature-form h2{font-size:22px}
+ .public-agreement .signature-form .form-row{grid-template-columns:1fr}
+ .public-agreement .signature-form input{min-height:48px;font-size:16px}
+ .public-agreement .signature-form canvas{height:190px}
+ .public-agreement .signature-form .form-footer{display:grid;grid-template-columns:1fr;gap:9px}
+ .public-agreement .signature-form .form-footer button{width:100%;min-height:48px;justify-content:center}
+ .public-agreement .check-row{align-items:flex-start;line-height:1.45}
+ .public-agreement .sign-success{margin:10px;padding:20px 16px}
+ .agreement-preview{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);padding:12px}
+ .agreement-preview>header{position:sticky;top:0;z-index:5;padding:8px;background:#fff}
+ .agreement-preview>.exact-agreement{width:760px;max-width:none;transform-origin:top left}
+ .agreement-preview>.form-footer{position:sticky;bottom:0;z-index:5;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;background:#fff}
+ .agreement-preview>.form-footer>*{justify-content:center;min-height:44px}
+}
+@media (max-width:430px){
+ .public-agreement>.exact-agreement{padding-left:13px;padding-right:13px}
+ .public-agreement .exact-contact-band{margin-left:-13px;margin-right:-13px}
+ .public-agreement .exact-agreement-head{height:108px}
+ .public-agreement .exact-agreement-head>img{top:-45px;left:-10px;width:168px;height:168px}
+ .public-agreement .exact-document-titles strong{font-size:23px}
+ .public-agreement .exact-document-titles span{font-size:14px}
+ .agreement-preview>.form-footer{grid-template-columns:1fr}
+}
