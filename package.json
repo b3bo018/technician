@@ -1,7 +1,7 @@
 {
   "name": "securetrack-technician",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 3000",
@@ -9,9 +9,10 @@
     "preview": "vite preview --host 127.0.0.1",
     "lint": "tsc --noEmit",
     "test": "tsx --test tests/domain.test.ts tests/excel.test.ts",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-securetrack \"tsx --test tests/rules.test.ts\"",
     "android:sync": "npm run build && cap sync android",
-    "android:open": "cap open android"
+    "android:open": "cap open android",
+    "server:build": "npm --prefix server run build",
+    "check:firebase": "node scripts/check-no-firebase.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
@@ -24,9 +25,6 @@
     "@capacitor/share": "8.0.0",
     "barcode-detector": "^3.2.2",
     "exceljs": "^4.4.0",
-    "firebase": "^12.18.0",
-    "firebase-admin": "^14.4.0",
-    "firebase-functions": "^7.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "localforage": "^1.10.0",
@@ -36,13 +34,11 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
-    "@firebase/rules-unit-testing": "^5.0.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/node": "^22.14.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.4",
-    "firebase-tools": "^15.0.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

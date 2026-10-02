@@ -1,0 +1,5 @@
+const API_BASE=(import.meta.env.VITE_API_URL||'/api').replace(/\/$/,'');
+async function publicRequest(path:string,init:RequestInit={}){const response=await fetch(API_BASE+path,{...init,headers:{'content-type':'application/json',...(init.headers||{})}});if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.message||'Agreement request failed.')}return response.status===204?null:response.json()}
+export const getPublicAgreement=(token:string)=>publicRequest(`/public/agreements/${encodeURIComponent(token)}`);
+export const markPublicAgreementViewed=(token:string)=>publicRequest(`/public/agreements/${encodeURIComponent(token)}/view`,{method:'POST'});
+export const signPublicAgreement=(token:string,data:any)=>publicRequest(`/public/agreements/${encodeURIComponent(token)}/sign`,{method:'POST',body:JSON.stringify(data)});

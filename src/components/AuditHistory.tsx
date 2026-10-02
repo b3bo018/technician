@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, updateDoc, writeBatch, type DocumentSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, updateDoc, writeBatch, type DocumentSnapshot } from '../lib/cloud/store';
 import { RotateCcw, Search, ShieldCheck } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 import type { Technician } from '../types';
 import { addAuditToBatch } from '../lib/audit';
 import { restoreShift } from '../lib/data';

@@ -1,8 +1,8 @@
 import { LoginLocation } from './components/LoginLocation';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, User } from './lib/cloud/auth';
 import { ArrowLeft, BarChart3, BriefcaseBusiness, CalendarCheck, CalendarPlus, CarFront, ChevronDown, CircleDollarSign, ClipboardList, Cpu, FileCheck2, FilePenLine, Gauge, LayoutDashboard, LogOut, MapPin, Package, PackagePlus, RefreshCw, Settings as SettingsIcon, ShieldCheck, UserRound, Users, Wifi, WifiOff, Wrench } from 'lucide-react';
-import { auth } from './lib/firebase';
+import { auth } from './lib/aws';
 import { Capacitor } from '@capacitor/core';
 import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, PendingOperation, Shift, StockAlertSettings, Technician, WorkBreak, WorkSession, roleLabel } from './types';
 import { carryForwardOverdueJobs, commitOperation, ensureInventory, ensureProfile, legacyQueueCount, mapAccount, mapAttendance, mapInstallation, mapMovement, mapShift, mapWorkBreak, mapWorkSession, observe, observeProfile, observeStockAlertSettings, pending, queueOperation, saveStockAlertThreshold, syncOperations } from './lib/data';
@@ -92,7 +92,7 @@ export default function App() {
     const retryable=code.includes('unavailable')||code.includes('deadline-exceeded')||code.includes('resource-exhausted')||/network|offline|quota exceeded/i.test(message);
     if(!retryable){setError('Completion needs attention: '+message);throw e}
     try{await queueOperation(operation);await refresh()}catch{throw new Error('This device cannot store another offline entry. Free some device storage, reopen SecureTrack, and try again.')}
-    const notice=/quota|resource-exhausted/i.test(code+' '+message)?'Firebase’s free cloud quota is temporarily exhausted. This completion is saved on this device; tap Sync now after the quota resets.':'The connection dropped while saving. This completion is saved on this device; tap Sync now when the connection is stable.';
+    const notice=/quota|resource-exhausted/i.test(code+' '+message)?'SecureTrack cloud service is temporarily unavailable. This completion is saved on this device; tap Sync now when the service is available.':'The connection dropped while saving. This completion is saved on this device; tap Sync now when the connection is stable.';
     setError(notice);throw new Error(notice)
    }
   }

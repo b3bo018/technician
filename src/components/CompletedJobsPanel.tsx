@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { Attendance, Installation, JOB_TYPES, JobType, Shift, Technician, completionActor, jobLabel, jobReference } from '../types';
 import { dayKey, displayTime } from '../lib/domain';
 import { JobDetailModal } from './JobDetailModal';
-import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { collection, doc, serverTimestamp, writeBatch } from '../lib/cloud/store';
+import { db } from '../lib/aws';
 
 type OnlineStatus='showing_online'|'not_showing'|'not_checked';
 export function CompletedJobsPanel({shifts,installations,attendance,technicians,onEdit,canVerify=false,currentUid='',currentName='SecureTrack staff'}:{shifts:Shift[];installations:Installation[];attendance:Attendance[];technicians:Technician[];onEdit?:(shift:Shift)=>void;canVerify?:boolean;currentUid?:string;currentName?:string}){

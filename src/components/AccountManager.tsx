@@ -1,8 +1,8 @@
 import { FormEvent, useState } from 'react';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { sendPasswordResetEmail } from '../lib/cloud/auth';
 import { Camera, Check, KeyRound, Mail, Save, Trash2, UserPlus, Users } from 'lucide-react';
 import { changeProfilePhoto, changeRole, createManagedAccount, removeManagedAccount } from '../lib/data';
-import { auth } from '../lib/firebase';
+import { auth } from '../lib/aws';
 import { prepareProfilePhoto } from '../lib/photo';
 import { ROLES, Role, Technician, roleLabel } from '../types';
 

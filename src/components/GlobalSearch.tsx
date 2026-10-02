@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, endAt, getDocs, limit, orderBy, query as firestoreQuery, startAt, where } from 'firebase/firestore';
+import { collection, endAt, getDocs, limit, orderBy, query as firestoreQuery, startAt, where } from '../lib/cloud/store';
 import { FileCheck2, Search, Wrench } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 import { Installation, Shift, jobReference } from '../types';
 
 const normalized=(value:any)=>String(value??'').trim().toLowerCase();

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
-import { User } from 'firebase/auth';
+import { User } from '../lib/cloud/auth';
 import { captureLocation, isNativeAndroidApp, LocationError } from '../lib/location';
 import { recordLogin } from '../lib/data';
 export function LoginLocation({ user, onComplete }: { user: User; onComplete: () => void }) {

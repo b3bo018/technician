@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query } from '../lib/cloud/store';
 import { Building2, CarFront, FileCheck2, Mail, MessageCircle, Search, X } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 import type { AdminSection } from './AdminDashboard';
 
 type Life='Active'|'Expiring Soon'|'Expired'|'Requires Review'|'Not Recorded';

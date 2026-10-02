@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import ExcelJS from 'exceljs';
-import { addDoc, collection, doc, getDoc, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, updateDoc, writeBatch } from '../lib/cloud/store';
 import { Bell, Download, Eye, FileCheck2, FileSpreadsheet, Filter, Mail, MessageCircle, Pencil, Phone, Plus, RefreshCw, Settings, Trash2, Upload } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 import { Role } from '../types';
 import { Certificate, CertificatePage, downloadCertificatePdf } from './CertificatesWorkspace';
 import { useDeviceModels } from './DeviceManagement';

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from '../lib/cloud/store';
 import { AlertCircle, BarChart3, BriefcaseBusiness, CalendarPlus, Clock3, Download, Gauge, PackagePlus, Pencil, Users } from 'lucide-react';
 import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, Role, Shift, SIM_STOCK_KEYS, Stock, StockAlertSettings, Technician, WorkBreak, WorkSession, emptyStock, jobLabel, roleLabel } from '../types';
 import { createReportWorkbook, downloadWorkbook } from '../lib/excel';
@@ -28,7 +28,7 @@ import { AdminHome } from './AdminHome';
 import { AuditHistory } from './AuditHistory';
 import { RenewalsWorkspace } from './RenewalsWorkspace';
 import { RenewalControlCenter } from './RenewalControlCenter';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 
 interface Props{loginLogs:Attendance[];workSessions:WorkSession[];workBreaks:WorkBreak[];currentUid:string;currentRole:Role;technicians:Technician[];installations:Installation[];movements:Movement[];accounts:InventoryAccount[];shifts:Shift[];attendance:Attendance[];stockAlerts:StockAlertSettings;onSaveStockAlerts:(settings:StockAlertSettings)=>Promise<void>;now:number}
 export type AdminSection='dashboard'|'jobs'|'vehicle-search'|'control-center'|'workforce'|'completed'|'assign'|'performance'|'inventory'|'stock'|'reports'|'settings'|'people'|'import'|'agreements'|'certificates'|'devices'|'renewals'|'audit';

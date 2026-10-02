@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { addDoc, collection, doc, onSnapshot, orderBy, query, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, onSnapshot, orderBy, query, runTransaction, serverTimestamp, updateDoc } from '../lib/cloud/store';
 import { Archive, Cpu, Pencil, Plus, Power } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 
 export type DeviceModelRecord={id:string;name:string;status:'active'|'inactive'|'archived';created_at?:unknown;updated_at?:unknown};
 export function useDeviceModels(includeInactive=false){const[models,setModels]=useState<DeviceModelRecord[]>([]);useEffect(()=>onSnapshot(query(collection(db,'device_models'),orderBy('name')),snap=>setModels(snap.docs.map(d=>({id:d.id,...d.data()} as DeviceModelRecord)))),[]);return includeInactive?models:models.filter(m=>m.status==='active')}

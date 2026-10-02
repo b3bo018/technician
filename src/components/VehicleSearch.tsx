@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot } from '../lib/cloud/store';
 import { CarFront, FileCheck2, Search, Wrench } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db } from '../lib/aws';
 import { displayTime, TIME_ZONE } from '../lib/domain';
 import { Installation, Shift, inspectionLabel, jobLabel, jobReference } from '../types';
 
