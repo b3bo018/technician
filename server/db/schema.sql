@@ -16,3 +16,5 @@ create table if not exists counters(key text primary key,value bigint not null d
 create table if not exists agreements(id text primary key,data jsonb not null,updated_at timestamptz not null default now());
 -- Prevent overlapping assigned jobs per technician at the API transaction layer using SELECT ... FOR UPDATE.
 -- assignment_index primary key + row locks preserve unique active IMEI/SIM assignment semantics.
+
+create table if not exists attendance_logs(id text primary key,technician_id text not null,latitude double precision not null,longitude double precision not null,accuracy_m double precision not null,created_at timestamptz not null default now());
