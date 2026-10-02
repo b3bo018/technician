@@ -1,5 +1,6 @@
 import express from 'express';
 import { Pool } from 'pg';
+import { requireAuth, type AuthedRequest } from './auth.js';
 const app=express();app.use(express.json({limit:'2mb'}));
 const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DB_SSL==='false'?false:{rejectUnauthorized:false}});
 type AuthedRequest=express.Request&{user?:{sub:string;email?:string}};
