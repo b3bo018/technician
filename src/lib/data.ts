@@ -159,11 +159,25 @@ export async function updateShift(id:string,shift:Omit<Shift,'id'>,actor?:AuditA
   if(actor)addAuditToTransaction(tx,actor,current.technician_id===shift.technician_id?'EDITED':'REASSIGNED','Jobs',id,{company:shift.company_name,vehicle:(shift.vehicle_numbers||[]).join(' '),job_id:jobReference,changes:changedFields(current,shift,['technician_id','technician_name','company_name','contact_person','customer_phone','vehicle_numbers','job_type','unit_count','site_name','scheduled_at','duration_minutes','maps_url','job_notes','status'])});
  });
 }
+export type CompletedJobDetails={company_name:string;customer_name:string;site_name:string;contact_person:string;customer_phone:string;vehicle_numbers:string[];maps_url:string;job_notes:string};
+export async function updateCompletedJobDetails(id:string,details:CompletedJobDetails,actor:AuditActor,expectedVersion:number){
+ const ref=doc(db,'shifts',id);
+ await runTransaction(db,async tx=>{
+  const snap=await tx.get(ref);if(!snap.exists())throw new Error('This completed job no longer exists.');const current=snap.data(),version=Number(current.version||1);
+  if(current.is_deleted)throw new Error('This job was archived.');
+  if(current.status!=='completed')throw new Error('Only completed jobs can be updated here.');
+  if(version!==expectedVersion)throw new Error(`This record was updated by ${current.updated_by_name||'another user'}. Review the latest information before saving.`);
+  const vehicleNumbers=details.vehicle_numbers.map(value=>value.trim()).filter(Boolean);
+  const next={company_name:details.company_name.trim(),customer_name:details.customer_name.trim(),site_name:details.site_name.trim(),contact_person:details.contact_person.trim(),customer_phone:details.customer_phone.trim(),vehicle_numbers:vehicleNumbers,vehicle_number:vehicleNumbers[0]||'',maps_url:details.maps_url.trim(),job_notes:details.job_notes.trim(),version:version+1,updated_at:serverTimestamp(),updated_by_uid:actor.uid,updated_by_name:actor.displayName||actor.email};
+  tx.update(ref,next);
+  addAuditToTransaction(tx,actor,'EDITED','Jobs',id,{company:next.company_name||next.customer_name,vehicle:vehicleNumbers.join(' '),job_id:current.job_reference||id,changes:changedFields(current,next,['company_name','customer_name','site_name','contact_person','customer_phone','vehicle_numbers','maps_url','job_notes'])});
+ });
+}
 export async function deleteShift(id:string,actor:AuditActor,reason:string){
  const deletionReason=reason.trim();if(!deletionReason)throw new Error('Enter a deletion reason.');const ref=doc(db,'shifts',id);
  await runTransaction(db,async tx=>{const snap=await tx.get(ref);if(!snap.exists())throw new Error('This job no longer exists.');const row=snap.data();if(row.is_deleted)return;const lock=row.technician_id&&row.date?doc(db,'schedule_locks',scheduleLockId(row.technician_id,row.date)):null;const lockSnap=lock?await tx.get(lock):null;
   tx.update(ref,{is_deleted:true,previous_status:row.status||'assigned',status:'cancelled',deleted_at:serverTimestamp(),deleted_by_uid:actor.uid,deleted_by_name:actor.displayName||actor.email,deletion_reason:deletionReason,version:Number(row.version||1)+1,updated_at:serverTimestamp(),updated_by_uid:actor.uid,updated_by_name:actor.displayName||actor.email});
-  if(lock){const entries={...(lockSnap?.data()?.entries||{})};delete entries[id];tx.set(lock,{technician_id:row.technician_id,date:row.date,entries,updated_at:serverTimestamp()},{merge:true})}
+  if(lock){const entries={...(lockSnap?.data()?.entries||{})};delete entries[id];tx.set(lock,{technician_id:row.technician_id,date:row.date,entries,updated_at:serverTimestamp()},{mergeFields:['technician_id','date','entries','updated_at']})}
   addAuditToTransaction(tx,actor,'DELETED','Jobs',id,{company:row.company_name||row.customer_name,vehicle:(row.vehicle_numbers||[row.vehicle_number]).filter(Boolean).join(' '),job_id:row.job_reference,reason:deletionReason,deleted_record:true});
  });
 }

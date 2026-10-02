@@ -16,8 +16,8 @@ type VehicleEvent={
  occurredAt:string;status:string;jobId?:string;imei?:string;sim?:string;device?:string;notes?:string;
 };
 
-export function VehicleSearch({shifts,installations}:{shifts:Shift[];installations:Installation[]}){
- const [query,setQuery]=useState(()=>sessionStorage.getItem('securetrack:vehicle-search')||'');
+export function VehicleSearch({shifts,installations,initialSearch}:{shifts:Shift[];installations:Installation[];initialSearch?:string}){
+ const [query,setQuery]=useState(()=>initialSearch??sessionStorage.getItem('securetrack:vehicle-search')??'');
  const [certificates,setCertificates]=useState<any[]>([]);
  const [certificateError,setCertificateError]=useState('');
  useEffect(()=>onSnapshot(collection(db,'certificates'),snapshot=>{setCertificates(snapshot.docs.map(item=>({id:item.id,...item.data()})));setCertificateError('')},error=>setCertificateError(error.message)),[]);
