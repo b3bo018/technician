@@ -5,7 +5,7 @@ import { collection, deleteField, doc, getDoc, getDocs, onSnapshot, query, runTr
 import localforage from 'localforage';
 import { auth, db } from './firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Attendance, DEVICE_MODELS, emptyStock, Installation, InventoryAccount, Movement, PendingOperation, Role, SIM_PROVIDERS, SIM_STOCK_KEYS, Shift, simStockKey, Stock, StockAlertSettings, Technician, WorkBreak, WorkSession } from '../types';
+import { ACCESSORY_STOCK_KEYS, Attendance, DEVICE_MODELS, emptyStock, Installation, InventoryAccount, Movement, PendingOperation, Role, SIM_PROVIDERS, SIM_STOCK_KEYS, Shift, simStockKey, Stock, StockAlertSettings, Technician, WorkBreak, WorkSession } from '../types';
 import { localToISO, nextDate, openingStock, stockAt, TIME_ZONE, validateOperation } from './domain';
 import { captureLocation } from './location';
 import { confirmJobArrival } from './arrival';
@@ -82,9 +82,10 @@ export async function commitOperation(op: PendingOperation, user: Technician) {
     const assignmentRefs=[...(op.device_imeis||[]).map(value=>({kind:'imei' as const,value,ref:doc(db,'assignment_index',assignmentKey('imei',value))})),...(op.sim_numbers||[]).map(value=>({kind:'sim' as const,value,ref:doc(db,'assignment_index',assignmentKey('sim',value))}))],assignmentSnaps=await Promise.all(assignmentRefs.map(item=>tx.get(item.ref)));
     assignmentSnaps.forEach((snap,index)=>{const row=snap.data();if(snap.exists()&&row?.status==='active'&&row.vehicle!==op.vehicle_ref)throw new Error(`${assignmentRefs[index].kind==='imei'?'IMEI':'SIM'} ${assignmentRefs[index].value} is already assigned to ${row.vehicle}.`) });
     if (existing.exists()) throw new Error('This assignment has an incomplete inventory record. Contact an administrator.');
-    if (op.quantity + op.sim_count > 0) {
-      const balance={...emptyStock(),...(liveSnap.data()?.balance||{})} as Stock,simKey=simStockKey(op.sim_provider);if(op.quantity&&balance[op.device_model]<op.quantity)throw new Error(`Only ${balance[op.device_model]} ${op.device_model} remain in your confirmed stock.`);if(op.sim_count&&balance[simKey]<op.sim_count)throw new Error(`Only ${balance[simKey]} ${simKey} card${balance[simKey]===1?'':'s'} remain in your confirmed stock.`);if(op.quantity)balance[op.device_model]-=op.quantity;if(op.sim_count)balance[simKey]-=op.sim_count;tx.update(liveRef,{balance,updated_at:serverTimestamp()});
-      const movement = { technician_id: user.uid, technician_name: user.displayName || user.email, type: op.quantity ? 'installed' : 'sim-used', device_model: op.device_model, quantity: op.quantity, sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), timestamp: serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at)), notes: op.notes };
+    const relay12=op.relay_12v_count||0,relay24=op.relay_24v_count||0,wire=op.wire_count||0;
+    if (op.quantity + op.sim_count + relay12 + relay24 + wire > 0) {
+      const balance={...emptyStock(),...(liveSnap.data()?.balance||{})} as Stock,simKey=simStockKey(op.sim_provider);if(op.quantity&&balance[op.device_model]<op.quantity)throw new Error(`Only ${balance[op.device_model]} ${op.device_model} remain in your confirmed stock.`);if(op.sim_count&&balance[simKey]<op.sim_count)throw new Error(`Only ${balance[simKey]} ${simKey} card${balance[simKey]===1?'':'s'} remain in your confirmed stock.`);if(relay12&&balance['Relay 12V']<relay12)throw new Error(`Only ${balance['Relay 12V']} Relay 12V remain in your confirmed stock.`);if(relay24&&balance['Relay 24V']<relay24)throw new Error(`Only ${balance['Relay 24V']} Relay 24V remain in your confirmed stock.`);if(wire&&balance.Wire<wire)throw new Error(`Only ${balance.Wire} Wire remain in your confirmed stock.`);if(op.quantity)balance[op.device_model]-=op.quantity;if(op.sim_count)balance[simKey]-=op.sim_count;balance['Relay 12V']-=relay12;balance['Relay 24V']-=relay24;balance.Wire-=wire;tx.update(liveRef,{balance,updated_at:serverTimestamp()});
+      const movement = { technician_id: user.uid, technician_name: user.displayName || user.email, type: op.quantity ? 'installed' : 'sim-used', device_model: op.device_model, quantity: op.quantity, sim_count: op.sim_count, relay_12v_count:relay12,relay_24v_count:relay24,wire_count:wire, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), timestamp: serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at)), notes: op.notes };
       tx.set(moveRef, movement);
     }
     if (op.kind === 'installed' || op.kind === 'job-completed') {
@@ -93,7 +94,7 @@ export async function commitOperation(op: PendingOperation, user: Technician) {
       technician_id: user.uid, technician_name: user.displayName || user.email, device_model: op.device_model,
       shift_id: op.shift_id || '', job_type: op.job_type || 'new_installation', unit_count: op.unit_count||assigned?.data()?.unit_count||Math.max(op.quantity, op.sim_count, op.device_imeis?.length || 0, 1),
       ...(isVehicleCompletion?{unit_index:op.unit_index,progress_completed:siblingDocs.filter(snap=>snap.exists()).length+1,progress_total:op.progress_total,completed_by_uid:user.uid,completed_by_name:user.displayName||user.email}:{}),
-      ...(op.inspection_action?{inspection_action:op.inspection_action}:{}),...(op.unit_records?{unit_records:op.unit_records}:{}), device_imeis: op.device_imeis || [], sim_numbers: op.sim_numbers || [], sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), customer_ref: op.customer_ref, vehicle_ref: op.vehicle_ref, notes: op.notes,
+      ...(op.inspection_action?{inspection_action:op.inspection_action}:{}),...(op.unit_records?{unit_records:op.unit_records}:{}), device_imeis: op.device_imeis || [], sim_numbers: op.sim_numbers || [], sim_count: op.sim_count, relay_12v_count:relay12,relay_24v_count:relay24,wire_count:wire, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), customer_ref: op.customer_ref, vehicle_ref: op.vehicle_ref, notes: op.notes,
       ...(op.payment_received_amount!==undefined?{payment_received_amount:op.payment_received_amount,payment_method:op.payment_method||'cash'}:{}),
       completion_latitude:op.completion_latitude,completion_longitude:op.completion_longitude,completion_accuracy_m:op.completion_accuracy_m,timestamp: serverTimestamp(),completed_at:serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at))
     });
@@ -117,7 +118,7 @@ export function syncOperations(user: Technician): Promise<void> {
     if (!operations.length) return;
     await ensureInventory(user);
     const failures:string[]=[];
-    for(const op of operations){try{let ready=op;if(op.kind==='job-completed'&&op.job_type==='device_removal')ready={...op,unit_count:op.unit_count,device_model:'',quantity:0,sim_count:0,sim_provider:undefined};if(op.kind==='job-completed'&&![op.completion_latitude,op.completion_longitude,op.completion_accuracy_m].every(Number.isFinite)){const location=await captureLocation();ready={...op,completion_latitude:location.latitude,completion_longitude:location.longitude,completion_accuracy_m:location.accuracy_m};await outbox.setItem(ready.uid+':'+ready.id,ready)}await commitOperation(ready,user);await removeQueuedOperation(ready)}catch(error:any){failures.push(`${op.shift_id||op.id}: ${error?.message||'could not sync'}`)}}
+    for(const op of operations){try{let ready=op;if(op.kind==='job-completed'&&op.job_type==='device_removal')ready={...op,unit_count:op.unit_count,device_model:'',quantity:0,sim_count:0,relay_12v_count:0,relay_24v_count:0,wire_count:0,sim_provider:undefined};if(op.kind==='job-completed'&&![op.completion_latitude,op.completion_longitude,op.completion_accuracy_m].every(Number.isFinite)){const location=await captureLocation();ready={...op,completion_latitude:location.latitude,completion_longitude:location.longitude,completion_accuracy_m:location.accuracy_m};await outbox.setItem(ready.uid+':'+ready.id,ready)}await commitOperation(ready,user);await removeQueuedOperation(ready)}catch(error:any){failures.push(`${op.shift_id||op.id}: ${error?.message||'could not sync'}`)}}
     if(failures.length)throw new Error(`${failures.length} saved completion${failures.length===1?'':'s'} still need attention. ${failures.slice(0,2).join(' · ')}`);
   })().finally(() => { activeSync = null; });
   return activeSync;
@@ -289,13 +290,15 @@ export async function issueStock(user:Technician, op:Omit<PendingOperation,'uid'
  if(!profile.exists()||profile.data().role!=='technician'||profile.data().status==='deactivated')throw new Error('Choose an active technician.');
  if(!office.exists())throw new Error('Enter the office inventory before issuing technician stock.');
  const balance={...emptyStock(),...(office.data().balance||{})} as Stock;
+ const relay12=op.relay_12v_count||0,relay24=op.relay_24v_count||0,wire=op.wire_count||0;
  if(op.quantity&&op.device_model&&balance[op.device_model]<op.quantity)throw new Error(`Office stock has only ${balance[op.device_model]} ${op.device_model} unit${balance[op.device_model]===1?'':'s'}.`);
  const simKey=simStockKey(op.sim_provider);if(op.sim_count&&balance[simKey]<op.sim_count)throw new Error(`Office stock has only ${balance[simKey]} ${simKey} card${balance[simKey]===1?'':'s'}.`);
- if(op.quantity&&op.device_model)balance[op.device_model]-=op.quantity;if(op.sim_count)balance[simKey]-=op.sim_count;
+ if(relay12&&balance['Relay 12V']<relay12)throw new Error(`Office stock has only ${balance['Relay 12V']} Relay 12V.`);if(relay24&&balance['Relay 24V']<relay24)throw new Error(`Office stock has only ${balance['Relay 24V']} Relay 24V.`);if(wire&&balance.Wire<wire)throw new Error(`Office stock has only ${balance.Wire} Wire.`);
+ if(op.quantity&&op.device_model)balance[op.device_model]-=op.quantity;if(op.sim_count)balance[simKey]-=op.sim_count;balance['Relay 12V']-=relay12;balance['Relay 24V']-=relay24;balance.Wire-=wire;
  if(!existing.exists())tx.set(ref,{technician_id:user.uid,opening:openingStock({...profile.data(),uid:user.uid} as Technician),timestamp:serverTimestamp()});
- const technicianBalance={...emptyStock(),...(live.data()?.balance||{})} as Stock;if(op.quantity&&op.device_model)technicianBalance[op.device_model]+=op.quantity;if(op.sim_count)technicianBalance[simKey]+=op.sim_count;tx.set(liveRef,{technician_id:user.uid,balance:technicianBalance,updated_at:serverTimestamp()},{merge:true});
+ const technicianBalance={...emptyStock(),...(live.data()?.balance||{})} as Stock;if(op.quantity&&op.device_model)technicianBalance[op.device_model]+=op.quantity;if(op.sim_count)technicianBalance[simKey]+=op.sim_count;technicianBalance['Relay 12V']+=relay12;technicianBalance['Relay 24V']+=relay24;technicianBalance.Wire+=wire;tx.set(liveRef,{technician_id:user.uid,balance:technicianBalance,updated_at:serverTimestamp()},{merge:true});
  tx.update(officeRef,{balance,updated_at:serverTimestamp(),updated_by:auth.currentUser?.displayName||auth.currentUser?.email||'SecureTrack administrator',updated_by_uid:auth.currentUser?.uid||''});
- tx.set(movement,{technician_id:user.uid,technician_name:user.displayName||user.email,type:'received',device_model:op.device_model,quantity:op.quantity,sim_count:op.sim_count,...(op.device_imeis?.length?{device_imeis:op.device_imeis}:{}),...(op.sim_count?{sim_provider:op.sim_provider}:{}),notes:op.notes,timestamp:serverTimestamp(),captured_at:serverTimestamp()});});
+ tx.set(movement,{technician_id:user.uid,technician_name:user.displayName||user.email,type:'received',device_model:op.device_model,quantity:op.quantity,sim_count:op.sim_count,relay_12v_count:relay12,relay_24v_count:relay24,wire_count:wire,...(op.device_imeis?.length?{device_imeis:op.device_imeis}:{}),...(op.sim_count?{sim_provider:op.sim_provider}:{}),notes:op.notes,timestamp:serverTimestamp(),captured_at:serverTimestamp()});});
 }
 
 export async function saveCompanyInventory(current:Stock,target:Stock,notes:string,userName:string,userId:string){
@@ -309,6 +312,7 @@ export async function adjustInventory(user:Technician,current:Stock,target:Stock
  if(!notes.trim())throw new Error('Enter a reason for the inventory correction.');
  const changes:[string,number,'device'|'sim'][]=[];
  DEVICE_MODELS.forEach(key=>{const delta=target[key]-current[key];if(delta)changes.push([key,delta,'device'])});
+ ACCESSORY_STOCK_KEYS.forEach(key=>{const delta=(target[key]||0)-(current[key]||0);if(delta)changes.push([key,delta,'device'])});
  SIM_STOCK_KEYS.forEach(key=>{const delta=target[key]-current[key];if(delta)changes.push([key,delta,'sim'])});
  if(!changes.length)throw new Error('No inventory quantities were changed.');
  const batch=writeBatch(db);batch.set(doc(db,'technician_live_stock',user.uid),{technician_id:user.uid,balance:target,updated_at:serverTimestamp()},{merge:true});for(const[key,delta,kind]of changes){const provider=kind==='sim'&&key!=='SIM'?SIM_PROVIDERS.find(value=>key===`SIM ${value}`):undefined;batch.set(doc(collection(db,'inventory_logs')),{technician_id:user.uid,technician_name:user.displayName||user.email,type:'adjustment',device_model:kind==='device'?key:'',quantity:0,sim_count:0,quantity_delta:kind==='device'?delta:0,sim_delta:kind==='sim'?delta:0,...(provider?{sim_provider:provider}:{}),timestamp:serverTimestamp(),captured_at:serverTimestamp(),notes:notes.trim()})}await batch.commit();
