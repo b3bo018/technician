@@ -79,6 +79,7 @@ form{display:grid;gap:17px}label{display:flex;flex-direction:column;gap:7px;colo
 
 
 .scanner-video{position:absolute;z-index:1;inset:0;width:100%;height:100%;object-fit:cover;background:#07120c}.scanner-capture{display:none}
+.scanner-confirmation{display:grid;justify-items:center;gap:10px;padding:28px 16px;border:1px solid rgba(27,89,57,.16);border-radius:20px;background:#f2f8f3;text-align:center}.scanner-confirmation>svg{width:36px;height:36px;color:#197344}.scanner-confirmation>span{color:#607469;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px}.scanner-confirmation>strong{max-width:100%;overflow-wrap:anywhere;color:#123c27;font-size:clamp(18px,5vw,27px);letter-spacing:1.5px}.scanner-confirmation>p{margin:0;color:#64766d;font-size:11px;line-height:1.5}
 .vehicle-plate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:13px}
 
 .clickable-table tbody tr{cursor:pointer}.clickable-table tbody tr:hover{background:rgba(34,120,82,.06)}

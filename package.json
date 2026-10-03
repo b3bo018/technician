@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "lint": "tsc --noEmit",
-    "test": "tsx --test tests/domain.test.ts tests/excel.test.ts",
+    "test": "tsx --test tests/domain.test.ts tests/excel.test.ts tests/identifiers.test.ts",
     "test:rules": "firebase emulators:exec --only firestore --project demo-securetrack \"tsx --test tests/rules.test.ts\"",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android"

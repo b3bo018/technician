@@ -1,5 +1,6 @@
 import { ACCESSORY_STOCK_KEYS, Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, Shift, SimProvider, Stock, Technician, emptyStock, simStockKey, SIM_PROVIDERS, SIM_STOCK_KEYS } from '../types';
 import { saveDownload } from './download';
+import { isValidIccid } from './identifiers';
 // Drafts are office-only preparation; retain completed issued jobs for history/counters.
 export const isReleasedJob = (job: Pick<Shift,'status'|'is_deleted'>) => !job.is_deleted && ['assigned','in_progress','completed'].includes(job.status||'assigned');
 export const TIME_ZONE = import.meta.env?.VITE_BUSINESS_TIME_ZONE || 'Asia/Dubai';
@@ -96,6 +97,7 @@ export function validateOperation(op: { kind: string; device_model: string; quan
   if (op.kind === 'job-completed') {
     if (!op.shift_id || !['new_installation','device_change','sim_change','sim_device_change','device_removal','payment_collection','inspection','mixed'].includes(op.job_type || '')) throw new Error('This completion must belong to an assigned job.');
     if (!op.customer_ref.trim()) throw new Error('The assigned company is required.');
+    if (op.sim_numbers?.some(value=>!isValidIccid(value))) throw new Error('Every SIM / ICCID must start with 89 and contain 18–22 digits.');
     if (![op.completion_latitude,op.completion_longitude,op.completion_accuracy_m].every(Number.isFinite)) throw new Error('Current location is required to complete this job.');
     if (['new_installation','sim_device_change'].includes(op.job_type || '') && (!op.device_model || !op.device_imeis?.length || !op.sim_numbers?.length)) throw new Error('Scan or enter every device IMEI and SIM number.');
     if (op.job_type === 'device_change' && (!op.device_model || !op.device_imeis?.length)) throw new Error('Scan or enter every replacement device IMEI.');

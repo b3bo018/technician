@@ -4,6 +4,7 @@ import { BarcodeScanner, requestRearCamera } from './BarcodeScanner';
 import { DEVICE_MODELS, DeviceModel, InspectionAction, Installation, PendingOperation, Shift, SIM_PROVIDERS, SimProvider, UnitJobType, inspectionLabel, jobLabel } from '../types';
 import { captureLocation } from '../lib/location';
 import { useDeviceModels } from './DeviceManagement';
+import { isValidIccid } from '../lib/identifiers';
 
 const clean=(value:string)=>value.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
 const stockDeviceNeeded=(action:string)=>['new_installation','device_change','sim_device_change'].includes(action);
@@ -31,7 +32,7 @@ export function JobCompletion({shift,completedUnits,save,onDone}:{shift:Shift;co
  async function submit(e:FormEvent){e.preventDefault();setError('');if(!unit||completedIndexes.has(selectedIndex))return;try{
   const cleanedImei=needsDevice?clean(imei):'',cleanedSim=needsSim?clean(sim):'';
   if(cleanedImei&&!/^[0-9]{14,17}$/.test(cleanedImei))throw new Error('The device IMEI must contain 14–17 digits.');
-  if(cleanedSim&&!/^[0-9]{18,22}$/.test(cleanedSim))throw new Error('The SIM number must contain 18–22 digits.');
+  if(cleanedSim&&!isValidIccid(cleanedSim))throw new Error('The SIM / ICCID must start with 89 and contain 18–22 digits. Check the printed SIM number.');
   if(unit.job_type==='payment_collection'&&!(Number(receivedAmount)>=0))throw new Error('Enter the amount received.');
   if(unit.job_type==='inspection'&&inspectionAction==='check_only'&&!notes.trim())throw new Error('Add inspection notes for this vehicle.');
   setBusy(true);const location=await captureLocation();const finished=completedCount+1===shift.unit_count;
@@ -51,7 +52,7 @@ export function JobCompletion({shift,completedUnits,save,onDone}:{shift:Shift;co
   <div className="unit-record"><strong>{unit.vehicle_number||'No plate'}</strong><small>Assigned: {jobLabel(unit.job_type)}</small>
    {unit.job_type==='inspection'&&<label>Inspection result<select value={inspectionAction} onChange={e=>setInspectionAction(e.target.value as InspectionAction)}>{(['check_only','device_change','sim_change','sim_device_change'] as InspectionAction[]).map(value=><option key={value} value={value}>{inspectionLabel(value)}</option>)}</select></label>}
    {needsDevice&&<label>Device IMEI<div className="scan-input"><input required inputMode="numeric" maxLength={17} value={imei} onChange={e=>setImei(clean(e.target.value))} placeholder="Scan QR or enter IMEI"/><button type="button" onClick={()=>openScanner('imei')} aria-label="Scan device IMEI"><QrCode/></button></div></label>}
-   {needsSim&&<label>SIM number / ICCID<div className="scan-input"><input required inputMode="numeric" maxLength={22} value={sim} onChange={e=>setSim(clean(e.target.value))} placeholder="Scan barcode or enter ICCID"/><button type="button" onClick={()=>openScanner('sim')} aria-label="Scan SIM number"><ScanBarcode/></button></div></label>}
+   {needsSim&&<label>SIM number / ICCID<div className="scan-input"><input required inputMode="numeric" maxLength={22} value={sim} onChange={e=>setSim(clean(e.target.value))} placeholder="Scan barcode or enter ICCID"/><button type="button" onClick={()=>openScanner('sim')} aria-label="Scan SIM number"><ScanBarcode/></button></div><small>Must start with 89. Confirm every digit against the printed SIM number.</small></label>}
    {!needsDevice&&!needsSim&&<div className="notice info">{unit.job_type==='device_removal'?'Scan the removed device IMEI. No stock is deducted.':'No scan is required for this vehicle.'}</div>}
   </div>
   <label>Completion notes {unit.job_type==='inspection'&&inspectionAction==='check_only'?<span className="required">required</span>:<span className="optional">optional</span>}<textarea required={unit.job_type==='inspection'&&inspectionAction==='check_only'} rows={3} maxLength={1000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Work completed, inspection result, or site notes"/></label>
