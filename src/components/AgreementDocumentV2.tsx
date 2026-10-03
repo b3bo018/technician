@@ -4,7 +4,6 @@ const date=(value:any)=>{const raw=value?.toDate?.()||value;const parsed=raw?new
 export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;company:any}){
  const rows=[
   [a.package_name||'SECURETRACK GPS TRACKING SERVICE',a.quantity,a.unit_price,a.quantity*a.unit_price,a.services],
-  ...(a.renewal_enabled&&Number(a.renewal_price)>0?[[`RENEWAL ${a.package_name||'GPS TRACKING'}`,a.quantity,a.renewal_price,a.quantity*a.renewal_price,'Renewal service']]:[]),
   ['Device',1,a.device,a.device,''],['SIM Card',1,a.sim,a.sim,''],['Installation',1,a.installation,a.installation,''],
   ['Certificate',1,a.certificate,a.certificate,''],['Other charges',1,a.other,a.other,'']
  ].filter(row=>Number(row[3])>0);
@@ -18,7 +17,8 @@ export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;compa
    <div><b>Recipient</b><strong>{a.client}</strong>{a.address&&String(a.address).split(/\r?\n/).map((line:string)=><span key={line}>{line}</span>)}<span><b>Phone:</b> {a.mobile||'—'}</span><span><b>Email:</b> {a.email||'—'}</span></div>
    <div><span><b>Agreement # {a.reference}</b></span><span><b>Date:</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {date(a.created_at)}</span></div>
   </section>
-  <section className="exact-commercial"><table><thead><tr><th>S/L</th><th>Item</th><th>Qty</th><th>Price</th><th>Unit</th><th>Total</th></tr></thead><tbody>{rows.map((row,index)=><tr key={String(row[0])}><td>{index+1}</td><td><strong>{String(row[0]).toUpperCase()}</strong>{row[4]&&<small>{String(row[4])}</small>}</td><td>{row[1]}</td><td>{money(Number(row[2]))}</td><td>Unit</td><td>{money(Number(row[3]))}</td></tr>)}</tbody></table>
+  <section className="exact-commercial"><table><thead><tr><th>S/L</th><th>Item description</th><th>Qty</th><th>Unit price</th><th>Total</th></tr></thead><tbody>{rows.map((row,index)=><tr key={String(row[0])}><td>{index+1}</td><td><strong>{String(row[0]).toUpperCase()}</strong>{row[4]&&<small>{String(row[4])}</small>}</td><td>{row[1]}</td><td>{money(Number(row[2]))}</td><td>{money(Number(row[3]))}</td></tr>)}</tbody></table>
+  {a.renewal_enabled&&Number(a.renewal_price)>0&&<p className="exact-renewal-note"><b>Future renewal rate:</b> AED {money(Number(a.renewal_price))} per vehicle. This amount is not included in the current agreement total.</p>}
   </section>
   <section className="exact-totals"><span><span>Sub-Total</span><b>AED {money(subtotal)}</b></span><span><span>VAT ({Number(a.vat)||0}%)</span><b>AED {money(vatAmount)}</b></span><strong><span>Grand Total</span><b>AED {money(total)}</b></strong></section>
   <section className="exact-terms"><h2>T E R M S</h2><div>{terms.map((term:string,index:number)=><p key={index}>{term}</p>)}</div>{a.payment_terms&&<p className="exact-payment"><b>Payment terms:</b> {a.payment_terms}</p>}</section>
