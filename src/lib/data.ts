@@ -63,6 +63,7 @@ export async function queueOperation(op: PendingOperation) {
   validateOperation(op);
   await outbox.setItem(op.uid + ':' + op.id, op);
 }
+export async function removeQueuedOperation(op:Pick<PendingOperation,'uid'|'id'>){await outbox.removeItem(op.uid+':'+op.id)}
 export async function commitOperation(op: PendingOperation, user: Technician) {
   validateOperation(op);
   if (auth.currentUser?.uid !== op.uid || user.uid !== op.uid) throw new Error('Sign in to the account that saved this entry.');
@@ -112,21 +113,12 @@ export function syncOperations(user: Technician): Promise<void> {
   if (activeSync) return activeSync;
   activeSync = (async () => {
     if (!navigator.onLine) return;
-    let op = (await pending(user.uid))[0];
-    if (!op) return;
+    const operations=await pending(user.uid);
+    if (!operations.length) return;
     await ensureInventory(user);
-    while (op) {
-      let ready = op;
-      if(op.kind==='job-completed'&&op.job_type==='device_removal')ready={...op,unit_count:op.unit_count,device_model:'',quantity:0,sim_count:0,sim_provider:undefined};
-      if (op.kind === 'job-completed' && ![op.completion_latitude, op.completion_longitude, op.completion_accuracy_m].every(Number.isFinite)) {
-        const location = await captureLocation();
-        ready = { ...op, completion_latitude: location.latitude, completion_longitude: location.longitude, completion_accuracy_m: location.accuracy_m };
-        await outbox.setItem(ready.uid + ':' + ready.id, ready);
-      }
-      await commitOperation(ready, user);
-      await outbox.removeItem(ready.uid + ':' + ready.id);
-      op = (await pending(user.uid))[0];
-    }
+    const failures:string[]=[];
+    for(const op of operations){try{let ready=op;if(op.kind==='job-completed'&&op.job_type==='device_removal')ready={...op,unit_count:op.unit_count,device_model:'',quantity:0,sim_count:0,sim_provider:undefined};if(op.kind==='job-completed'&&![op.completion_latitude,op.completion_longitude,op.completion_accuracy_m].every(Number.isFinite)){const location=await captureLocation();ready={...op,completion_latitude:location.latitude,completion_longitude:location.longitude,completion_accuracy_m:location.accuracy_m};await outbox.setItem(ready.uid+':'+ready.id,ready)}await commitOperation(ready,user);await removeQueuedOperation(ready)}catch(error:any){failures.push(`${op.shift_id||op.id}: ${error?.message||'could not sync'}`)}}
+    if(failures.length)throw new Error(`${failures.length} saved completion${failures.length===1?'':'s'} still need attention. ${failures.slice(0,2).join(' · ')}`);
   })().finally(() => { activeSync = null; });
   return activeSync;
 }

@@ -7,7 +7,7 @@ import { ArrowLeft, BarChart3, BriefcaseBusiness, CalendarCheck, CalendarPlus, C
 import { auth } from './lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, PendingOperation, Shift, StockAlertSettings, Technician, WorkBreak, WorkSession, roleLabel } from './types';
-import { carryForwardOverdueJobs, commitOperation, ensureInventory, ensureProfile, legacyQueueCount, mapAccount, mapAttendance, mapInstallation, mapMovement, mapShift, mapWorkBreak, mapWorkSession, observe, observeProfile, observeStockAlertSettings, pending, queueOperation, saveStockAlertThreshold, syncOperations } from './lib/data';
+import { carryForwardOverdueJobs, commitOperation, ensureInventory, ensureProfile, legacyQueueCount, mapAccount, mapAttendance, mapInstallation, mapMovement, mapShift, mapWorkBreak, mapWorkSession, observe, observeProfile, observeStockAlertSettings, pending, queueOperation, removeQueuedOperation, saveStockAlertThreshold, syncOperations } from './lib/data';
 import { TIME_ZONE, attendanceStatus, isReleasedJob, dayKey, displayTime, simTotal, sortJobsByTime, stockAt } from './lib/domain';
 import { LoginScreen } from './components/LoginScreen';
 import { StockGrid } from './components/StockGrid';
@@ -88,20 +88,20 @@ export default function App() {
  async function save(op:Omit<PendingOperation,'uid'|'captured_at'>) {
   if(!profile)throw new Error('Please sign in.');
   const operation={...op,uid:profile.uid,captured_at:new Date().toISOString()};
+  try{await queueOperation(operation);await refresh()}catch{throw new Error('This device cannot safely store this completion. Free some device storage, reopen SecureTrack, and try again.')}
   if(navigator.onLine){
-   try{await ensureInventory(profile);await commitOperation(operation,profile);setError('');await refresh();return}catch(e:any){
+   try{await ensureInventory(profile);await commitOperation(operation,profile);await removeQueuedOperation(operation);setError('');await refresh();return}catch(e:any){
     const code=String(e?.code||''),message=String(e?.message||'');
     const retryable=code.includes('unavailable')||code.includes('deadline-exceeded')||code.includes('resource-exhausted')||/network|offline|quota exceeded/i.test(message);
-    if(!retryable){setError('Completion needs attention: '+message);throw e}
-    try{await queueOperation(operation);await refresh()}catch{throw new Error('This device cannot store another offline entry. Free some device storage, reopen SecureTrack, and try again.')}
+    if(!retryable){await removeQueuedOperation(operation);await refresh();setError('Completion needs attention: '+message);throw e}
     const notice=/quota|resource-exhausted/i.test(code+' '+message)?'Firebase’s free cloud quota is temporarily exhausted. This completion is saved on this device; tap Sync now after the quota resets.':'The connection dropped while saving. This completion is saved on this device; tap Sync now when the connection is stable.';
     setError(notice);throw new Error(notice)
    }
   }
-  try{await queueOperation(operation);await refresh()}catch{throw new Error('This device cannot store another offline entry. Free some device storage, reopen SecureTrack, and try again.')}
   throw new Error('Connect to the internet to complete this job. The entry is safely queued and can be submitted with Sync now.');
  }
- const allInstallations=Array.from(new Map([...installations,...legacy].map(i=>[i.id,i])).values()).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
+ const queuedInstallations=queue.filter(item=>item.kind==='job-completed').map(item=>({id:item.id,shift_id:item.shift_id,technician_id:item.uid,technician_name:profile?.displayName||profile?.email||'',job_type:item.job_type,inspection_action:item.inspection_action,unit_count:item.unit_count,unit_index:item.unit_index,progress_total:item.progress_total,progress_completed:item.unit_index===undefined?item.unit_count:Number(item.unit_index)+1,unit_records:item.unit_records,device_model:item.device_model,device_imeis:item.device_imeis||[],sim_numbers:item.sim_numbers||[],sim_count:item.sim_count,sim_provider:item.sim_provider,customer_ref:item.customer_ref,vehicle_ref:item.vehicle_ref,notes:item.notes,timestamp:item.captured_at,completed_at:item.captured_at,completion_latitude:item.completion_latitude,completion_longitude:item.completion_longitude,completion_accuracy_m:item.completion_accuracy_m,completed_by_uid:item.uid,completed_by_name:profile?.displayName||profile?.email||'',online_status:'not_checked' as const} as Installation));
+ const allInstallations=Array.from(new Map([...queuedInstallations,...installations,...legacy].map(i=>[i.id,i])).values()).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
  useEffect(()=>{
   if(!profile||isNative||!['master_admin','admin'].includes(profile.role)||!online||carryForwardBusy.current)return;
   const currentDay=dayKey(new Date());
