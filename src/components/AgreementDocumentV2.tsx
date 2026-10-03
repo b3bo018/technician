@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { normalizeSignatureSource } from '../lib/signatureImage';
 
-const money=(value:number)=>new Intl.NumberFormat('en-AE',{minimumFractionDigits:3,maximumFractionDigits:3}).format(value||0);
+const roundMoney=(value:number)=>Math.round((value+Number.EPSILON)*100)/100;
+const money=(value:number)=>new Intl.NumberFormat('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(roundMoney(value||0));
 const date=(value:any)=>{const raw=value?.toDate?.()||value;const parsed=raw?new Date(raw):new Date();return Number.isNaN(parsed.getTime())?String(value||''):new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}).format(parsed)};
 
 export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;company:any}){
@@ -13,8 +14,8 @@ export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;compa
   ['Device',1,a.device,a.device,''],['SIM Card',1,a.sim,a.sim,''],['Installation',1,a.installation,a.installation,''],
   ['Certificate',1,a.certificate,a.certificate,''],['Other charges',1,a.other,a.other,'']
  ].filter(row=>Number(row[3])>0);
- const calculatedSubtotal=(Number(a.quantity)||1)*(Number(a.unit_price)||0)+(Number(a.device)||0)+(Number(a.sim)||0)+(Number(a.installation)||0)+(Number(a.certificate)||0)+(Number(a.other)||0)-(Number(a.discount)||0);
- const subtotal=a.subtotal===undefined?calculatedSubtotal:Number(a.subtotal)||0,vatAmount=a.vat_amount===undefined?subtotal*(Number(a.vat)||0)/100:Number(a.vat_amount)||0,total=a.total===undefined?subtotal+vatAmount:Number(a.total)||0;
+ const calculatedSubtotal=roundMoney((Number(a.quantity)||1)*(Number(a.unit_price)||0)+(Number(a.device)||0)+(Number(a.sim)||0)+(Number(a.installation)||0)+(Number(a.certificate)||0)+(Number(a.other)||0)-(Number(a.discount)||0));
+ const subtotal=roundMoney(a.subtotal===undefined?calculatedSubtotal:Number(a.subtotal)||0),vatAmount=roundMoney(a.vat_amount===undefined?subtotal*(Number(a.vat)||0)/100:Number(a.vat_amount)||0),total=roundMoney(a.total===undefined?subtotal+vatAmount:Number(a.total)||0);
  const terms=String(a.terms||c.terms||'').split(/\r?\n/).map((line:string)=>line.trim()).filter(Boolean).map((line:string,index:number)=>{const cleaned=line.replace(/^\d+[.)]\s*/,'').replace(/^\.+\s*/,'').trim();return `${index+1}. ${cleaned}`});
  return <article id={a.reference} className="contract-sheet exact-agreement">
   <header className="exact-agreement-head"><img src="/securetrack-logo-document-hd.png" alt="SecureTrack X"/><div className="exact-document-titles"><strong>QUOTATION</strong><span>AGREEMENT</span></div></header>
