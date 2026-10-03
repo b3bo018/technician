@@ -237,12 +237,12 @@ service cloud.firestore {
   }
   match /agreement_settings/{id} {
    allow read: if agreementStaff();
-   allow create, update: if id=='global'&&active()&&profile().role in ['master_admin','admin'];
+   allow create, update: if id=='global'&&active()&&profile().role in ['master_admin','admin','hr'];
    allow delete: if master();
   }
   match /agreement_packages/{id} {
    allow read: if agreementStaff();
-   allow create, update, delete: if active()&&profile().role in ['master_admin','admin'];
+   allow create, update, delete: if active()&&profile().role in ['master_admin','admin','hr'];
   }
   match /agreements/{id} {
    allow read: if agreementStaff();
