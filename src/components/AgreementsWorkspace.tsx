@@ -7,6 +7,7 @@ import { AgreementSimpleForm } from './AgreementSimpleForm';
 import { AgreementDocumentV2 } from './AgreementDocumentV2';
 import { copyAgreementLink, downloadAgreementPdf } from '../lib/agreementActions';
 import { addAuditToBatch, changedFields } from '../lib/audit';
+import { signatureImage } from '../lib/signatureImage';
 
 type AgreementSettings={logo?:string;authorized_signature?:string;company_name:string;address:string;contact:string;trn:string;terms:string;terms_version:number;payment_terms:string;vat:number;services:string;signatory:string;footer:string;internal_email:string;whatsapp_message:string};
 type Package={id:string;name:string;description:string;duration:number;unit_price:number;services:string;device:number;sim:number;installation:number;certificate:number;payment_terms:string};
@@ -36,30 +37,6 @@ const money=(n:number)=>new Intl.NumberFormat('en-AE',{style:'currency',currency
 const datePlus=(date:string,months:number)=>{const d=new Date(date+'T00:00:00');d.setMonth(d.getMonth()+months);return d.toISOString().slice(0,10)};
 const value=(fd:FormData,key:string)=>String(fd.get(key)||'').trim();
 const readableTerms=(terms:string)=>terms.replace(/^(\d+\.)\s*/gm,'$1 ');
-function clearSignatureBackground(canvas:HTMLCanvasElement){
- const context=canvas.getContext('2d',{willReadFrequently:true});if(!context)return;
- const image=context.getImageData(0,0,canvas.width,canvas.height),pixels=image.data,border:number[]=[];
- const step=Math.max(1,Math.floor(Math.min(canvas.width,canvas.height)/80));
- for(let x=0;x<canvas.width;x+=step){border.push((x*4),((canvas.height-1)*canvas.width+x)*4)}
- for(let y=0;y<canvas.height;y+=step){border.push((y*canvas.width)*4,(y*canvas.width+canvas.width-1)*4)}
- let black=0,white=0,opaque=0;
- for(const index of border){const r=pixels[index],g=pixels[index+1],b=pixels[index+2],a=pixels[index+3],spread=Math.max(r,g,b)-Math.min(r,g,b);if(a<180)continue;opaque++;if(Math.max(r,g,b)<65&&spread<24)black++;if(Math.min(r,g,b)>225&&spread<24)white++}
- const background=opaque&&black/opaque>.55?'black':opaque&&white/opaque>.55?'white':'transparent';
- if(background==='transparent')return;
- for(let index=0;index<pixels.length;index+=4){const r=pixels[index],g=pixels[index+1],b=pixels[index+2],spread=Math.max(r,g,b)-Math.min(r,g,b);const matches=background==='black'?Math.max(r,g,b)<85&&spread<30:Math.min(r,g,b)>220&&spread<30;if(matches)pixels[index+3]=0}
- context.putImageData(image,0,0);
-}
-async function signatureImage(file:File){
- if(!file.type.startsWith('image/'))throw new Error('Choose an image file for the authorized signature.');
- const source=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error('The signature image could not be read.'));reader.readAsDataURL(file)});
- const image=await new Promise<HTMLImageElement>((resolve,reject)=>{const item=new Image();item.onload=()=>resolve(item);item.onerror=()=>reject(new Error('The signature image could not be opened.'));item.src=source});
- const scale=Math.min(1,700/image.width,240/image.height),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
- canvas.getContext('2d')!.drawImage(image,0,0,canvas.width,canvas.height);clearSignatureBackground(canvas);
- let data=canvas.toDataURL('image/png');
- if(data.length>300000){const compact=document.createElement('canvas');compact.width=canvas.width;compact.height=canvas.height;const context=compact.getContext('2d')!;context.fillStyle='#fff';context.fillRect(0,0,compact.width,compact.height);context.drawImage(canvas,0,0);data=compact.toDataURL('image/jpeg',.78)}
- if(data.length>400000)throw new Error('The signature image is still too large. Use a cropped signature image.');
- return data;
-}
 export function AgreementsWorkspace({role,userName,userId}:{role:Role;userName:string;userId:string}){
  const canConfigure=['master_admin','owner','admin'].includes(role);const canCreate=['master_admin','admin','hr'].includes(role);const canEdit=['master_admin','owner','admin','accountant','hr'].includes(role);const [settings,setSettings]=useState<AgreementSettings>(defaults);const [packages,setPackages]=useState<Package[]>([]);const [agreements,setAgreements]=useState<Agreement[]>([]);const [view,setView]=useState<'all'|'create'|'edit'|'settings'|'packages'>('all');const [selected,setSelected]=useState<Agreement|null>(null);const [editing,setEditing]=useState<Agreement|null>(null);const [search,setSearch]=useState('');const [notice,setNotice]=useState('');
  useEffect(()=>onSnapshot(doc(db,'agreement_settings','global'),s=>{const saved=s.data()||{};setSettings({...defaults,...saved,services:String(saved.services||'').trim()||defaults.services,terms:String(saved.terms||'').trim()||defaults.terms,payment_terms:String(saved.payment_terms||'').trim()||defaults.payment_terms} as AgreementSettings)}),[]);

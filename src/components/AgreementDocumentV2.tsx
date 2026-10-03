@@ -1,7 +1,13 @@
+import { useEffect, useState } from 'react';
+import { normalizeSignatureSource } from '../lib/signatureImage';
+
 const money=(value:number)=>new Intl.NumberFormat('en-AE',{minimumFractionDigits:3,maximumFractionDigits:3}).format(value||0);
 const date=(value:any)=>{const raw=value?.toDate?.()||value;const parsed=raw?new Date(raw):new Date();return Number.isNaN(parsed.getTime())?String(value||''):new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}).format(parsed)};
 
 export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;company:any}){
+ const signatureSource=c.authorized_signature||'/securetrack-authorized-signature-v2.jpg';
+ const [authorizedSignature,setAuthorizedSignature]=useState('');
+ useEffect(()=>{let current=true;setAuthorizedSignature('');normalizeSignatureSource(signatureSource).then(value=>{if(current)setAuthorizedSignature(value)}).catch(()=>{if(current)setAuthorizedSignature(signatureSource)});return()=>{current=false}},[signatureSource]);
  const rows=[
   [a.package_name||'SECURETRACK GPS TRACKING SERVICE',a.quantity,a.unit_price,a.quantity*a.unit_price,a.services],
   ['Device',1,a.device,a.device,''],['SIM Card',1,a.sim,a.sim,''],['Installation',1,a.installation,a.installation,''],
@@ -23,7 +29,7 @@ export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;compa
   <section className="exact-totals"><span><span>Sub-Total</span><b>AED {money(subtotal)}</b></span><span><span>VAT ({Number(a.vat)||0}%)</span><b>AED {money(vatAmount)}</b></span><strong><span>Grand Total</span><b>AED {money(total)}</b></strong></section>
   <section className="exact-terms"><h2>T E R M S</h2><div>{terms.map((term:string,index:number)=><p key={index}>{term}</p>)}</div>{a.payment_terms&&<p className="exact-payment"><b>Payment terms:</b> {a.payment_terms}</p>}</section>
   <section className="exact-signatures">
-   <div className="exact-company-sign"><b>Head of sales: {c.signatory||'Abdulla'}</b><span>Mob: +971 555846686</span><img src={c.authorized_signature||'/securetrack-authorized-signature-v2.jpg'} alt="Authorized signature"/><strong>For SECURETRACK</strong></div>
+   <div className="exact-company-sign"><b>Head of sales: {c.signatory||'Abdulla'}</b><span>Mob: +971 555846686</span>{authorizedSignature&&<img src={authorizedSignature} alt="Authorized signature"/>}<strong>For SECURETRACK</strong></div>
    <img className="exact-stamp" src="/securetrack-company-stamp.jpg" alt="SecureTrack company stamp"/>
    <div className="exact-client-sign"><b>Name : <span>{a.signer_name||''}</span></b><b>Designation: <span>{a.signer_designation||''}</span></b><b>Contact No: <span>{a.signer_mobile||''}</span></b><b>Signature :</b>{a.signature?<img src={a.signature} alt="Customer signature"/>:<i/>}</div>
   </section>
