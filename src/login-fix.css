@@ -1,44 +1,79 @@
-/* Keep the sign-in form rectangular while retaining the circular SecureTrack artwork. */
+/* Keep the sign-in panel circular and fit its controls inside the circle. */
 .secure-login .login-card {
-  width: min(68%, 390px);
+  width: min(78%, 440px);
   min-height: 0;
-  aspect-ratio: auto;
-  padding: clamp(22px, 2.5vw, 34px);
-  border-radius: 24px;
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  padding: clamp(30px, 4vw, 46px) clamp(34px, 5vw, 52px);
+  overflow: hidden;
+  border-radius: 50%;
 }
 
 @media (max-width: 900px) and (orientation: portrait) {
   .secure-login .login-card {
-    width: min(60%, 320px);
-    padding: 18px 22px;
-    border-radius: 22px;
+    width: min(78%, 420px);
+    padding: 30px 40px;
   }
 }
 
 @media (max-width: 600px) {
   .secure-login .login-card {
-    width: min(72%, 280px);
-    padding: 16px 18px;
-    border-radius: 20px;
+    width: 84%;
+    padding: 15px 20px;
   }
 
   .secure-login .login-card > .eyebrow {
     margin-bottom: 3px;
   }
 
+  .secure-login .login-card h2 {
+    font-size: 22px;
+  }
+
   .secure-login .login-card > .muted {
-    margin: 3px 0 8px;
+    display: none;
   }
 
   .secure-login .login-card form {
-    gap: 7px;
+    width: 90%;
+    margin-inline: auto;
+    gap: 5px;
+  }
+
+  .secure-login .login-card label {
+    gap: 3px;
+    font-size: 9px;
   }
 
   .secure-login .login-card input {
-    min-height: 38px;
+    min-height: 33px;
+    padding: 7px 10px;
+    font-size: 10px;
+  }
+
+  .secure-login .login-card .forgot-password {
+    gap: 4px;
+    margin-top: 2px;
+    font-size: 9px;
+  }
+
+  .secure-login .notice {
+    padding: 6px 8px;
+    font-size: 8px;
   }
 
   .secure-login .login-card .primary {
-    min-height: 40px;
+    min-height: 36px;
+  }
+
+  .secure-login .login-card .fine-print {
+    display: none;
+  }
+}
+
+@media (max-height: 650px) and (orientation: landscape) {
+  .secure-login .login-card {
+    width: min(72%, 340px);
+    padding: 22px 30px;
   }
 }
