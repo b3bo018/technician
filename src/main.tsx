@@ -3,6 +3,7 @@ import App from './App.tsx';
 import './index.css';
 import './boot.css';
 import './login-fix.css';
+import './schedule-card-layout.css';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { logAppError } from './lib/errorLogging';
 

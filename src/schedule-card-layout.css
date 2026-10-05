@@ -1,0 +1,28 @@
+/* Keep scheduled-job cards and their admin actions aligned when details wrap. */
+.schedule-list > .schedule-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.schedule-list > .schedule-card > .admin-job-actions,
+.schedule-list > .schedule-card > .job-buttons {
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.schedule-list > .schedule-card > .admin-job-actions .danger-button {
+  grid-column: 1 / -1;
+}
+
+.schedule-panel {
+  container-type: inline-size;
+}
+
+@container (min-width: 1100px) and (max-width: 1600px) {
+  .schedule-list > .schedule-card:not(:only-child):last-child:nth-child(3n + 1) {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, 460px);
+  }
+}
