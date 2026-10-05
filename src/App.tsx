@@ -25,7 +25,7 @@ const PublicAgreement=lazy(()=>import('./components/AgreementsWorkspace').then(m
 type Tab = 'overview' | 'inventory' | 'installations' | 'attendance' | 'settings' | 'admin';
 export default function App() {
  const agreementToken=new URLSearchParams(location.search).get('agreement')||location.pathname.match(/^\/agreement\/([a-zA-Z0-9]+)$/)?.[1];
- const [user,setUser] = useState<User|null>(null); const [ready,setReady] = useState(false); const [bootDone,setBootDone] = useState(false); const [profile,setProfile] = useState<Technician|null>(null);
+ const [user,setUser] = useState<User|null>(null); const [ready,setReady] = useState(false); const [profile,setProfile] = useState<Technician|null>(null);
  const [tab,setTab] = useState<Tab>('overview'); const [online,setOnline] = useState(navigator.onLine); const [now,setNow] = useState(Date.now());
  const [installations,setInstallations] = useState<Installation[]>([]); const [legacy,setLegacy] = useState<Installation[]>([]); const [movements,setMovements] = useState<Movement[]>([]); const [accounts,setAccounts] = useState<InventoryAccount[]>([]); const [shifts,setShifts] = useState<Shift[]>([]); const [attendance,setAttendance] = useState<Attendance[]>([]); const [technicians,setTechnicians] = useState<Technician[]>([]);
  const [loginLogs,setLoginLogs]=useState<Attendance[]>([]);
@@ -43,7 +43,6 @@ export default function App() {
  const adminGroups=[...new Set(adminNav.map(item=>item.group))];
  function goAdmin(next:AdminSection,filters:NavigationFilters={}){setTab('admin');if(next!==adminSection||JSON.stringify(filters)!==JSON.stringify(adminFilters))setAdminHistory(history=>[...history,{section:adminSection,filters:adminFilters}]);setAdminSection(next);setAdminFilters(filters);setNavigationKey(key=>key+1);window.scrollTo({top:0,behavior:'smooth'})}
  function goBack(){if(!isStaff){setTab('overview');return}setAdminHistory(history=>{const next=[...history],previous=next.pop()||{section:'dashboard' as AdminSection,filters:{}};setAdminSection(previous.section);setAdminFilters(previous.filters);setNavigationKey(key=>key+1);return next})}
- useEffect(()=>{const timer=window.setTimeout(()=>setBootDone(true),1400);return()=>window.clearTimeout(timer)},[]);
  useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setProfile(null);setReady(true);setError('');}),[]);
  useEffect(()=>{if(profile){setAdminSection(new URLSearchParams(location.search).get('section')==='agreements'?'agreements':'dashboard');setAdminHistory([])}},[profile?.role]);
  useEffect(()=>{const update=()=>setOnline(navigator.onLine);const timer=setInterval(()=>setNow(Date.now()),30000);const install=(e:Event)=>{e.preventDefault();setPrompt(e);};window.addEventListener('online',update);window.addEventListener('offline',update);window.addEventListener('beforeinstallprompt',install);return()=>{clearInterval(timer);window.removeEventListener('online',update);window.removeEventListener('offline',update);window.removeEventListener('beforeinstallprompt',install);};},[]);
@@ -122,7 +121,7 @@ export default function App() {
  const completed=todayShifts.filter(s=>attendance.some(a=>a.id===s.id)).length;
  useTechnicianNotifications(profile,ownShifts,ownInstallations,ownMoves,workSessions,workBreaks,stockAlerts,now);useOperationsAlerts(profile,technicians,accounts,movements,workSessions,allInstallations,stockAlerts,now);
  if(agreementToken)return <Suspense fallback={<BootScreen message="Opening agreement…"/>}><PublicAgreement token={agreementToken}/></Suspense>;
- if(!ready||!bootDone)return <BootScreen/>;
+ if(!ready)return <BootScreen/>;
  if(!user)return <LoginScreen/>;
  if(!profile)return <BootScreen/>;
  if(profile.status==='deactivated')return <div className="loading"><h2>Account deactivated</h2><p>Contact your administrator.</p><button className="secondary" onClick={()=>signOut(auth)}>Sign out</button></div>;
@@ -151,4 +150,4 @@ export default function App() {
  <footer className="workspace-footer"><span>SECURETRACK · FIELD OPERATIONS</span><span>Reporting timezone: {TIME_ZONE}</span></footer>
  </main></div></div>;
 }
-function BootScreen({message='Starting SecureTrack…'}:{message?:string}){return <div className="app-boot"><div className="boot-map"><i/><i/><i/></div><img src="/securetrack-logo.png" alt="SecureTrack"/><div className="boot-pin"><span/></div><strong>SECURETRACK</strong><small>{message}</small></div>}
+function BootScreen({message='Starting SecureTrack…'}:{message?:string}){return <div className="app-boot"><div className="boot-map" aria-hidden="true"><i/><i/><i/></div><div className="boot-brand"><img src="/securetrack-logo-clean.png" alt="SecureTrack"/></div><div className="boot-progress" aria-hidden="true"><span/></div><strong>SECURETRACK</strong><small>{message}</small></div>}

@@ -26,7 +26,7 @@ export function LoginScreen() {
   }
   return <main className="login-page secure-login">
     <section className="login-brand">
-      <img className="login-logo" src="/securetrack-logo.png" alt="SecureTrack"/>
+      <img className="login-logo" src="/securetrack-logo-clean.png" alt="SecureTrack"/>
       <div className="login-message"><span className="eyebrow">FIELD OPERATIONS · UAE</span><h1>Precision.<br/>Protection.<br/>Positioning.</h1><p>Assignments, attendance, inventory and completion records in one secure workspace.</p></div>
     </section>
     <section className="login-orbit"><div className="login-ring"><div className="login-card">
