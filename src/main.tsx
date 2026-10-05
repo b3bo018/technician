@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import './boot.css';
+import './login-fix.css';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { logAppError } from './lib/errorLogging';
 
