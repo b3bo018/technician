@@ -150,4 +150,4 @@ export default function App() {
  <footer className="workspace-footer"><span>SECURETRACK · FIELD OPERATIONS</span><span>Reporting timezone: {TIME_ZONE}</span></footer>
  </main></div></div>;
 }
-function BootScreen({message='Starting SecureTrack…'}:{message?:string}){return <div className="app-boot"><div className="boot-map" aria-hidden="true"><i/><i/><i/></div><div className="boot-brand"><img src="/securetrack-logo-clean.png" alt="SecureTrack"/></div><div className="boot-progress" aria-hidden="true"><span/></div><strong>SECURETRACK</strong><small>{message}</small></div>}
+function BootScreen({message='Starting SecureTrack…'}:{message?:string}){return <div className="app-boot"><div className="boot-brand-wrap"><div className="boot-map" aria-hidden="true"><i/><i/><i/></div><div className="boot-brand"><img src="/securetrack-logo-clean.png" alt="SecureTrack"/></div></div><div className="boot-progress" aria-hidden="true"><span/></div><strong>SECURETRACK</strong><small>{message}</small></div>}
