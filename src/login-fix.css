@@ -1,24 +1,44 @@
 /* Keep the sign-in form rectangular while retaining the circular SecureTrack artwork. */
 .secure-login .login-card {
-  width: min(84%, 470px);
+  width: min(68%, 390px);
   min-height: 0;
   aspect-ratio: auto;
-  padding: clamp(24px, 3vw, 40px);
-  border-radius: 26px;
+  padding: clamp(22px, 2.5vw, 34px);
+  border-radius: 24px;
 }
 
 @media (max-width: 900px) and (orientation: portrait) {
   .secure-login .login-card {
-    width: min(82%, 440px);
-    padding: clamp(22px, 4vw, 32px);
-    border-radius: 24px;
+    width: min(60%, 320px);
+    padding: 18px 22px;
+    border-radius: 22px;
   }
 }
 
 @media (max-width: 600px) {
   .secure-login .login-card {
-    width: min(82%, 390px);
-    padding: 22px 20px;
-    border-radius: 22px;
+    width: min(72%, 280px);
+    padding: 16px 18px;
+    border-radius: 20px;
+  }
+
+  .secure-login .login-card > .eyebrow {
+    margin-bottom: 3px;
+  }
+
+  .secure-login .login-card > .muted {
+    margin: 3px 0 8px;
+  }
+
+  .secure-login .login-card form {
+    gap: 7px;
+  }
+
+  .secure-login .login-card input {
+    min-height: 38px;
+  }
+
+  .secure-login .login-card .primary {
+    min-height: 40px;
   }
 }
