@@ -313,3 +313,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
  .public-agreement .exact-document-titles span{font-size:14px}
  .agreement-preview>.form-footer{grid-template-columns:1fr}
 }
+
+Select-String: 
+Line |
+   2 |  Select-String -Path src/index.css -Pattern '^\.renewal-sales-panel' | …
+     |  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot find path 'C:\Users\secur\Documents\Codex\2026-09-12\referenced-chatgpt-conversation-this-is-an\src\index.css' because it does not exist.
