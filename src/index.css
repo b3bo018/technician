@@ -294,7 +294,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .agreement-renewal.pricing-card{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start;background:linear-gradient(145deg,#f2f8f4,#fff);padding:18px}.renewal-card-heading{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:16px}.renewal-card-heading .eyebrow{color:#28774d}.renewal-card-heading .check-row{display:flex;align-items:center;gap:8px}.agreement-renewal.pricing-card>label{grid-column:1/-1}.agreement-renewal.pricing-card .renewal-vat-options,.agreement-renewal.pricing-card .renewal-price-summary{grid-column:1/-1}.package-renewal-vat{margin:12px 0 16px}.agreement-renewal.pricing-card .renewal-price-summary{padding:10px 14px;border:1px solid rgba(28,99,58,.1);border-radius:14px;background:rgba(255,255,255,.74)}
 @media(max-width:700px){.agreement-renewal.pricing-card{grid-template-columns:1fr;padding:14px}.renewal-card-heading{align-items:flex-start;flex-direction:column}}
 
-/* Agreement pricing includes renewal as a regular table row. */
-.exact-commercial-grid .commercial-header,.exact-commercial-grid .commercial-row{grid-template-columns:9mm minmax(0,1fr) 12mm 22mm 20mm 22mm}
-.commercial-row>span:nth-last-child(2){justify-content:center}
-@media(max-width:700px){.exact-commercial-grid .commercial-header,.exact-commercial-grid .commercial-row{grid-template-columns:7% 40% 8% 16% 12% 17%}}
+/* Agreement pricing table without a separate unit column. */
+.exact-commercial-grid .commercial-header,.exact-commercial-grid .commercial-row{grid-template-columns:9mm minmax(0,1fr) 12mm 22mm 22mm}
+@media(max-width:700px){.exact-commercial-grid .commercial-header,.exact-commercial-grid .commercial-row{grid-template-columns:7% 52% 10% 15% 16%}}
