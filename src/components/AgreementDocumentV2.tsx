@@ -25,7 +25,7 @@ export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;compa
    <div><span><b>Agreement # {a.reference}</b></span><span><b>Date:</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {date(a.created_at)}</span></div>
   </section>
   <section className="exact-commercial"><div className="exact-commercial-grid"><div className="commercial-header"><b>S/L</b><b>Item description</b><b>Qty</b><b>Unit price</b><b>Total</b></div>{rows.map((row,index)=><div className="commercial-row" key={String(row[0])}><span>{index+1}</span><div><strong>{String(row[0]).toUpperCase()}</strong>{row[4]&&<small>{String(row[4])}</small>}</div><span>{row[1]}</span><span>{money(Number(row[2]))}</span><span>{money(Number(row[3]))}</span></div>)}</div>
-  {a.renewal_enabled&&Number(a.renewal_price)>0&&<p className="exact-renewal-note"><b>Future renewal rate:</b> AED {money(Number(a.renewal_price))} per vehicle. This amount is not included in the current agreement total.</p>}
+  {a.renewal_enabled&&Number(a.renewal_price)>0&&<div className="exact-renewal-note"><b>Future renewal rate:</b> AED {money(Number(a.renewal_price))} per vehicle{a.renewal_vat_mode&&<><span> · {a.renewal_vat_mode==='inclusive'?'Includes 5% VAT':'Plus 5% VAT'}</span><br/><span>Amount before VAT: AED {money(Number(a.renewal_amount_before_vat))} · VAT (5%): AED {money(Number(a.renewal_vat_amount))} · Total: AED {money(Number(a.renewal_total_including_vat))}</span></>}. This amount is not included in the current agreement total.</div>}
   </section>
   <section className="exact-totals"><div><span>Subtotal</span><b>AED {money(subtotal)}</b></div><div><span>VAT ({Number(a.vat)||0}%)</span><b>AED {money(vatAmount)}</b></div><div className="grand"><span>Grand total</span><b>AED {money(total)}</b></div></section>
   <section className="exact-terms"><h2>T E R M S</h2><div>{terms.map((term:string,index:number)=><p key={index}>{term}</p>)}</div>{a.payment_terms&&<p className="exact-payment"><b>Payment terms:</b> {a.payment_terms}</p>}</section>
@@ -36,3 +36,4 @@ export function AgreementDocumentV2({agreement:a,company:c}:{agreement:any;compa
   </section>
  </article>
 }
+
