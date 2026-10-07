@@ -7,7 +7,7 @@ export type PushNotification = { title: string; body: string; url?: string };
 
 const vapidPublicKey = process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '';
 const vapidPrivateKey = process.env.WEB_PUSH_VAPID_PRIVATE_KEY || '';
-const vapidSubject = process.env.WEB_PUSH_VAPID_SUBJECT || 'mailto:admin@securetrackgo.com';
+const vapidSubject = process.env.WEB_PUSH_VAPID_SUBJECT || 'https://connect.securetrackgo.com';
 const ownPushHosts = (process.env.PUSH_ALLOWED_HOSTS || 'push.securetrackgo.com,connect.securetrackgo.com')
   .split(',').map((host) => host.trim().toLowerCase()).filter(Boolean);
 const browserPushHosts = [
