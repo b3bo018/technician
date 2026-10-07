@@ -25,7 +25,7 @@ function matches(value: any, op: string, expected: any): boolean {
   }
 }
 
-/** Apply the supported Firestore-shaped query constraints consistently before paging. */
+/** Apply the supported document query constraints consistently before paging. */
 export function applyQuery(items: QueryRow[], constraints: QueryConstraint[] = []): QueryRow[] {
   const clauses = constraints || [];
   let rows = items.filter(row => clauses.filter(item => item.type === 'where')

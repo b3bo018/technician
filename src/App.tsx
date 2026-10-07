@@ -92,7 +92,7 @@ export default function App() {
    try{await ensureInventory(profile);await commitOperation(operation,profile);await removeQueuedOperation(operation);setError('');await refresh();return}catch(e:any){
     const code=String(e?.code||''),message=String(e?.message||'');
     const retryable=code.includes('unavailable')||code.includes('deadline-exceeded')||code.includes('resource-exhausted')||/network|offline|quota exceeded/i.test(message);
-    if(!retryable){setError('Completion needs attention: '+message);throw e}
+    if(!retryable){await removeQueuedOperation(operation);await refresh();setError('Completion needs attention: '+message);throw e}
     try{await queueOperation(operation);await refresh()}catch{throw new Error('This device cannot store another offline entry. Free some device storage, reopen SecureTrack, and try again.')}
     const notice=/quota|resource-exhausted/i.test(code+' '+message)?'SecureTrack cloud service is temporarily unavailable. This completion is saved on this device; tap Sync now when the service is available.':'The connection dropped while saving. This completion is saved on this device; tap Sync now when the connection is stable.';
     setError(notice);throw new Error(notice)

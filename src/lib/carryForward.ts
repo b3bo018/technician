@@ -1,5 +1,5 @@
 import { doc, runTransaction, serverTimestamp, Timestamp, type Transaction } from './cloud/store';
-type Firestore = unknown;
+type Database = unknown;
 import type { Shift, Technician } from '../types';
 import { localToISO, nextDate, TIME_ZONE } from './domain';
 
@@ -17,7 +17,7 @@ function clock(value:any){
 }
 function overlaps(a:any,b:any){return Date.parse(a.start_at)<Date.parse(b.end_at)&&Date.parse(a.end_at)>Date.parse(b.start_at)}
 
-export async function carryForwardJobs(db:Firestore,shifts:Shift[],today:string,actor:Technician,audit:AuditWriter){
+export async function carryForwardJobs(db:Database,shifts:Shift[],today:string,actor:Technician,audit:AuditWriter){
  const result={moved:0,conflicts:[] as CarryConflict[]};
  if(!['master_admin','admin'].includes(actor.role))return result;
  for(const target of shifts.filter(shift=>needsCarryForward(shift,today))){

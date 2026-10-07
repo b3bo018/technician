@@ -77,3 +77,42 @@
     padding: 22px 30px;
   }
 }
+
+/* Give password recovery enough vertical room for every field and action. */
+.secure-login .login-ring.reset-open {
+  width: min(520px, 94vw);
+  aspect-ratio: auto;
+  min-height: 0;
+  padding: 22px 0;
+}
+.secure-login .login-card.reset-mode {
+  width: min(86%, 420px);
+  max-width: 420px;
+  min-height: 0;
+  aspect-ratio: auto;
+  padding: clamp(24px, 5vw, 42px);
+  justify-content: flex-start;
+  border-radius: 30px;
+}
+.secure-login .login-card.reset-mode .fine-print {
+  display: block;
+  margin: 0;
+  text-align: left;
+  font-size: 10px;
+}
+.secure-login .login-card.reset-mode .secondary-action {
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.55);
+  background: rgba(5,49,28,.28);
+  box-shadow: none;
+}
+.secure-login .login-card.reset-mode .primary { margin-top: 4px; }
+@media (max-width: 600px) {
+  .secure-login .login-ring.reset-open { width: min(440px, 96vw); padding: 14px 0; }
+  .secure-login .login-card.reset-mode { width: 88%; padding: 22px; }
+  .secure-login .login-card.reset-mode .login-icon { display: none; }
+  .secure-login .login-card.reset-mode h2 { font-size: 25px; }
+  .secure-login .login-card.reset-mode > .muted { display: block; }
+  .secure-login .login-card.reset-mode label { font-size: 10px; }
+  .secure-login .login-card.reset-mode input { min-height: 44px; font-size: 13px; }
+}

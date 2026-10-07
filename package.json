@@ -21,7 +21,6 @@
     "@capacitor/filesystem": "8.1.0",
     "@capacitor/geolocation": "^8.2.2",
     "@capacitor/local-notifications": "^8.3.1",
-    "@capacitor/push-notifications": "^8.1.2",
     "@capacitor/share": "8.0.0",
     "barcode-detector": "^3.2.2",
     "exceljs": "^4.4.0",

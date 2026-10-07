@@ -1,6 +1,4 @@
-// Firestore-shaped client facade backed by the SecureTrack AWS API.
-// This lets the existing React/domain code keep its document/query model while
-// all runtime reads and writes go to AWS instead of Firebase.
+// AWS PostgreSQL document API client used by the React/domain layer.
 export type DocRef={kind:'doc';path:string;id:string};
 export type DocumentReference=DocRef;
 export type CollectionRef={kind:'collection';path:string};

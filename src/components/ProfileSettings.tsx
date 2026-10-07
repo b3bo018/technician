@@ -1,26 +1,27 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Bell, Camera, Check, KeyRound, LogOut, Settings } from 'lucide-react';
 import { EmailAuthProvider, reauthenticateWithCredential, signOut, updatePassword } from '../lib/cloud/auth';
 import { Technician } from '../types';
 import { auth } from '../lib/aws';
 import { changeProfilePhoto } from '../lib/data';
 import { prepareProfilePhoto } from '../lib/photo';
-import { notificationState, notificationsMuted, readNotificationState, requestNotifications, setNotificationsMuted } from '../lib/notifications';
+import { disableWebPush, enableAndroidPush, enableWebPush, notificationState, notificationsMuted, readNotificationState, remotePushRegistered, requestNotifications, setNotificationsMuted } from '../lib/notifications';
 
 export function ProfileSettings({ profile, compact = false }: { profile: Technician; compact?: boolean }) {
   const [current, setCurrent] = useState(''); const [next, setNext] = useState(''); const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
   const [notifications, setNotifications] = useState(notificationState()); const [muted, setMuted] = useState(notificationsMuted());
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const enabled = notifications === 'granted' && !muted;
+  const enabled = notifications === 'granted' && !muted && remotePushRegistered(profile.uid);
   const notificationTitle = enabled ? 'Notifications are on' : notifications === 'denied' ? 'Permission is blocked' : notifications === 'unsupported' ? 'Not available on this device' : 'Turn on notifications';
-  const notificationCopy = enabled ? 'You will receive SecureTrack job, stock and workday alerts.' : notifications === 'denied' ? 'Allow notifications in your device settings, then return here.' : 'Allow SecureTrack to send important job and stock alerts.';
+  const notificationCopy = enabled ? 'You will receive SecureTrack job, stock and workday alerts.' : notifications === 'denied' ? 'Allow notifications in your device settings, then return here.' : Capacitor.isNativePlatform() ? 'Install the ntfy Android app, set its server to push.securetrackgo.com, then turn this on.' : 'Allow SecureTrack to send important job and stock alerts.';
 
-  useEffect(()=>{void readNotificationState().then(setNotifications)},[]);
+  useEffect(()=>{void readNotificationState().then(async state=>{setNotifications(state);if(Capacitor.isNativePlatform()&&state==='granted'&&localStorage.getItem(`securetrack:push:${profile.uid}`)==='1'){try{await enableAndroidPush(profile.uid)}catch(e:any){setError(e.message||'Android push could not reconnect.')}}})},[profile.uid]);
 
   async function photo(file?: File) { if (!file) return; setBusy(true); setError(''); setNotice(''); try { await changeProfilePhoto(profile.uid, await prepareProfilePhoto(file)); setNotice('Profile picture updated.'); } catch (e: any) { setError(e.message); } finally { setBusy(false); } }
   async function password(e: FormEvent) { e.preventDefault(); setError(''); setNotice(''); if (next.length < 8) { setError('The new password must contain at least 8 characters.'); return; } if (next !== confirm) { setError('The new passwords do not match.'); return; } const user = auth.currentUser; if (!user?.email) { setError('Please sign in again.'); return; } setBusy(true); try { await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, current)); await updatePassword(user, next); setCurrent(''); setNext(''); setConfirm(''); setNotice('Password changed successfully.'); } catch (e: any) { setError(e.code === 'auth/invalid-credential' ? 'The current password is incorrect.' : e.message); } finally { setBusy(false); } }
-  async function toggleNotifications() { setError(''); setNotice(''); if (enabled) { setNotificationsMuted(true); setMuted(true); setNotice('App notifications paused.'); return; } const state = await requestNotifications(); setNotifications(state); if (state === 'granted') { setNotificationsMuted(false); setMuted(false); setNotice('App notifications enabled.'); } else if (state === 'denied') setError('Notifications are blocked in the device settings for SecureTrack.'); else if (state === 'unsupported') setError('Install SecureTrack as an app to enable notifications on this device.'); }
+  async function toggleNotifications() { setError(''); setNotice(''); try { if (enabled) { await disableWebPush(profile.uid); setNotificationsMuted(true); setMuted(true); setNotice('App notifications paused.'); return; } const state = await requestNotifications(); setNotifications(state); if (state === 'granted') { if (Capacitor.isNativePlatform()) await enableAndroidPush(profile.uid); else { const registered=await enableWebPush(profile.uid); if(!registered)throw new Error('This browser does not support remote push notifications.'); } setNotificationsMuted(false); setMuted(false); setNotice(Capacitor.isNativePlatform()?'Android push registration requested through the configured UnifiedPush distributor.':'Web push enabled on this browser.'); } else if (state === 'denied') setError('Notifications are blocked in the device settings for SecureTrack.'); else if (state === 'unsupported') setError('Install SecureTrack as an app to enable notifications on this device.'); } catch(e:any) { setError(e.message||'Could not enable notifications.'); } }
 
   return <div className="stack settings-stack">
     {!compact && <div className="page-heading"><div><span className="eyebrow">MY ACCOUNT</span><h1>Settings<span className="accent">.</span></h1><p>Manage your SecureTrack profile, notifications and password.</p></div></div>}
