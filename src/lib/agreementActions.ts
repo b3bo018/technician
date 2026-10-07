@@ -18,15 +18,15 @@ async function waitForAgreementAssets(source:HTMLElement){
 }
 
 export async function downloadAgreementPdf(elementId:string,client:string,reference:string){
+ let renderSource:HTMLElement|undefined;
  try{
   const source=document.getElementById(elementId);if(!source)throw new Error('Agreement document is not ready.');
-  await waitForAgreementAssets(source);
-  const canvas=await html2canvas(source,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false,imageTimeout:15000});
+  renderSource=source.cloneNode(true) as HTMLElement;renderSource.removeAttribute('id');renderSource.classList.add('pdf-exporting');renderSource.style.position='fixed';renderSource.style.left='-10000px';renderSource.style.top='0';renderSource.style.margin='0';document.body.appendChild(renderSource);
+  await waitForAgreementAssets(renderSource);await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+  const canvas=await html2canvas(renderSource,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false,imageTimeout:15000,windowWidth:1200,windowHeight:1600,width:renderSource.offsetWidth,height:renderSource.offsetHeight});
   if(!canvas.width||!canvas.height)throw new Error('The agreement could not be rendered. Please reopen it and try again.');
   const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
-  const pageWidth=210,pageHeight=297,scale=Math.min(pageWidth/canvas.width,pageHeight/canvas.height);
-  const width=canvas.width*scale,height=canvas.height*scale;
-  pdf.addImage(canvas.toDataURL('image/jpeg',0.96),'JPEG',(pageWidth-width)/2,(pageHeight-height)/2,width,height,undefined,'FAST');
+  pdf.addImage(canvas.toDataURL('image/jpeg',0.98),'JPEG',0,0,210,297,undefined,'FAST');
   pdf.save(`SecureTrack_Agreement_${safeName(client)}_${safeName(reference)}.pdf`);
- }catch(error){alert(error instanceof Error?error.message:'Unable to download the agreement PDF.');}
+ }catch(error){alert(error instanceof Error?error.message:'Unable to download the agreement PDF.');}finally{renderSource?.remove()}
 }

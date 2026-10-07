@@ -9,6 +9,8 @@ type Constraint={type:'where'|'orderBy'|'limit'|'startAt'|'endAt'|'startAfter';f
 export type QueryRef={kind:'query';collection:CollectionRef;constraints:Constraint[]};
 export type Query=QueryRef;
 export type DocumentSnapshot={id:string;data:()=>any;exists:()=>boolean;metadata:{hasPendingWrites:false};ref:DocRef;version?:number};
+export type QuerySnapshot={docs:DocumentSnapshot[];size:number;empty:boolean};
+export type SnapshotOptions={includeMetadataChanges?:boolean};
 export type Transaction=ReturnType<typeof transactionFacade>;
 export type WriteBatch=ReturnType<typeof batchFacade>;
 
@@ -71,11 +73,12 @@ function snap(ref:DocRef,row:any):DocumentSnapshot{
 }
 export async function getDoc(ref:DocRef){return snap(ref,await request(endpoint(ref)))}
 export const getDocFromServer=getDoc;
-export async function getDocs(ref:CollectionRef|QueryRef){
+export async function getDocs(ref:CollectionRef|QueryRef):Promise<QuerySnapshot>{
  const collectionRef=ref.kind==='query'?ref.collection:ref;
  const constraints=ref.kind==='query'?ref.constraints:[];
  const result=await request('/documents/query',{method:'POST',body:JSON.stringify({collection:collectionRef.path,constraints})});
- return{docs:(result?.items||[]).map((row:any)=>snap(doc(collectionRef,row.id),{...row,exists:true})),size:Number(result?.items?.length||0),empty:!result?.items?.length};
+ const docs:DocumentSnapshot[]=(result?.items||[]).map((row:any)=>snap(doc(collectionRef,row.id),{...row,exists:true}));
+ return{docs,size:docs.length,empty:docs.length===0};
 }
 export async function getCountFromServer(ref:CollectionRef|QueryRef){const result=await getDocs(ref);return{data:()=>({count:result.size})}}
 export async function setDoc(ref:DocRef,data:any,options?:{merge?:boolean}){await request(endpoint(ref),{method:'PUT',body:JSON.stringify({data,merge:!!options?.merge})})}
@@ -105,10 +108,13 @@ export async function runTransaction(_db:any,callback:(tx:Transaction)=>Promise<
  const reads=new Map<string,DocumentSnapshot>(),ops:any[]=[];const tx=transactionFacade(reads,ops);const result=await callback(tx);
  await request('/documents/transaction',{method:'POST',body:JSON.stringify({reads:[...reads.entries()].map(([path,s])=>({path,version:s.version||0})),writes:ops.map(writePayload)})});return result;
 }
+export function onSnapshot(ref:DocRef,callback:(snapshot:DocumentSnapshot)=>void,error?:(error:Error)=>void):()=>void;
+export function onSnapshot(ref:CollectionRef|QueryRef,callback:(snapshot:QuerySnapshot)=>void,error?:(error:Error)=>void):()=>void;
+export function onSnapshot(ref:CollectionRef|QueryRef,options:SnapshotOptions,callback:(snapshot:QuerySnapshot)=>void,error?:(error:Error)=>void):()=>void;
 export function onSnapshot(ref:DocRef|CollectionRef|QueryRef,...args:any[]){
  const callback=args.find((a:any)=>typeof a==='function');const callbackIndex=args.indexOf(callback),error=args.slice(callbackIndex+1).find((a:any)=>typeof a==='function');
  let stopped=false,timer:number|undefined;
  const load=async()=>{try{if(ref.kind==='doc')callback?.(await getDoc(ref));else callback?.(await getDocs(ref as any))}catch(e){error?.(e)}};
  void load();timer=window.setInterval(()=>{if(!stopped)void load()},Number(import.meta.env.VITE_SYNC_INTERVAL_MS||5000));
- return()=>{stopped=true;if(timer)window.clearInterval(timer)};
+ return()=>{stopped=true;if(timer)window.clearInterval(timer);};
 }

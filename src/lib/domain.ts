@@ -1,5 +1,8 @@
-import { Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, Shift, SimProvider, Stock, Technician, emptyStock, simStockKey, SIM_PROVIDERS, SIM_STOCK_KEYS } from '../types';
+import { ACCESSORY_STOCK_KEYS, Attendance, DEVICE_MODELS, Installation, InventoryAccount, Movement, Shift, SimProvider, Stock, Technician, emptyStock, simStockKey, SIM_PROVIDERS, SIM_STOCK_KEYS } from '../types';
 import { saveDownload } from './download';
+import { isValidIccid } from './identifiers';
+// Drafts are office-only preparation; retain completed issued jobs for history/counters.
+export const isReleasedJob = (job: Pick<Shift,'status'|'is_deleted'>) => !job.is_deleted && ['assigned','in_progress','completed'].includes(job.status||'assigned');
 export const TIME_ZONE = import.meta.env?.VITE_BUSINESS_TIME_ZONE || 'Asia/Dubai';
 export function dayKey(value: string | Date, timezone = TIME_ZONE): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
@@ -55,6 +58,9 @@ export function stockAt(account: InventoryAccount | undefined, movements: Moveme
     const sign = m.type === 'received' ? 1 : -1;
     if (m.device_model) stock[m.device_model] = (stock[m.device_model]||0) + sign * m.quantity;
     stock[simStockKey(m.sim_provider)] += sign * m.sim_count;
+    stock['Relay 12V'] += sign * (m.relay_12v_count||0);
+    stock['Relay 24V'] += sign * (m.relay_24v_count||0);
+    stock.Wire += sign * (m.wire_count||0);
   }
   return stock;
 }
@@ -77,18 +83,21 @@ export function attendanceStatus(shift: Shift, checkin?: Attendance, now = Date.
     distance: Math.round(distance)
   };
 }
-export function validateOperation(op: { kind: string; device_model: string; quantity: number; sim_count: number; sim_provider?: SimProvider; customer_ref: string; shift_id?: string; job_type?: string; inspection_action?: string; unit_records?:unknown[]; device_imeis?: string[]; sim_numbers?: string[]; completion_latitude?:number; completion_longitude?:number; completion_accuracy_m?:number }) {
+export function validateOperation(op: { kind: string; device_model: string; quantity: number; sim_count: number; relay_12v_count?:number; relay_24v_count?:number; wire_count?:number; sim_provider?: SimProvider; customer_ref: string; shift_id?: string; job_type?: string; inspection_action?: string; unit_records?:unknown[]; device_imeis?: string[]; sim_numbers?: string[]; completion_latitude?:number; completion_longitude?:number; completion_accuracy_m?:number }) {
   if (!['received', 'installed', 'sim-used', 'job-completed'].includes(op.kind)) throw new Error('Choose a valid stock action.');
-  if (!Number.isInteger(op.quantity) || !Number.isInteger(op.sim_count) || op.quantity < 0 || op.sim_count < 0 || op.quantity > 10000 || op.sim_count > 10000) throw new Error('Quantities must be whole numbers between 0 and 10,000.');
+  const accessoryCounts=ACCESSORY_STOCK_KEYS.map(key=>key==='Relay 12V'?op.relay_12v_count||0:key==='Relay 24V'?op.relay_24v_count||0:op.wire_count||0);
+  if (![op.quantity,op.sim_count,...accessoryCounts].every(value=>Number.isInteger(value)&&value>=0&&value<=10000)) throw new Error('Quantities must be whole numbers between 0 and 10,000.');
   if (op.quantity > 0 && (!op.device_model.trim()||op.device_model.length>80)) throw new Error('Select a device model.');
   if (op.quantity === 0 && op.device_model !== '' && op.kind !== 'job-completed') throw new Error('SIM-only entries must not include a device.');
-  if (op.quantity + op.sim_count === 0 && op.kind !== 'job-completed') throw new Error('Enter a device or SIM quantity.');
+  if (op.quantity + op.sim_count + accessoryCounts.reduce((sum,value)=>sum+value,0) === 0 && op.kind !== 'job-completed') throw new Error('Enter a device, SIM, relay, or wire quantity.');
+  if(accessoryCounts.some(Boolean)&&op.kind==='job-completed'&&!String(op.device_model).toUpperCase().startsWith('FMC'))throw new Error('Relay and wire stock can be used only with an FMC device.');
   if (op.sim_count > 0 && !SIM_PROVIDERS.includes(op.sim_provider as SimProvider)) throw new Error('Choose Etisalat, du, or International for the SIM stock.');
   if (op.kind === 'sim-used' && (op.quantity !== 0 || op.sim_count < 1)) throw new Error('Enter the SIM quantity used.');
   if (op.kind === 'installed' && (op.quantity !== 1 || op.sim_count > 1 || !op.customer_ref.trim())) throw new Error('An installation requires one device and a customer reference, with zero or one SIM.');
   if (op.kind === 'job-completed') {
     if (!op.shift_id || !['new_installation','device_change','sim_change','sim_device_change','device_removal','payment_collection','inspection','mixed'].includes(op.job_type || '')) throw new Error('This completion must belong to an assigned job.');
     if (!op.customer_ref.trim()) throw new Error('The assigned company is required.');
+    if (op.sim_numbers?.some(value=>!isValidIccid(value))) throw new Error('Every SIM / ICCID must start with 89 and contain 18–22 digits.');
     if (![op.completion_latitude,op.completion_longitude,op.completion_accuracy_m].every(Number.isFinite)) throw new Error('Current location is required to complete this job.');
     if (['new_installation','sim_device_change'].includes(op.job_type || '') && (!op.device_model || !op.device_imeis?.length || !op.sim_numbers?.length)) throw new Error('Scan or enter every device IMEI and SIM number.');
     if (op.job_type === 'device_change' && (!op.device_model || !op.device_imeis?.length)) throw new Error('Scan or enter every replacement device IMEI.');

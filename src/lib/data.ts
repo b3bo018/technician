@@ -1,10 +1,12 @@
+import { carryForwardJobs } from './carryForward';
 import { createManagedUser, deleteManagedUser, User } from './cloud/auth';
 import { collection, deleteField, doc, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from './cloud/store';
 import localforage from 'localforage';
 import { auth, db } from './aws';
-import { Attendance, DEVICE_MODELS, emptyStock, Installation, InventoryAccount, Movement, PendingOperation, Role, SIM_PROVIDERS, SIM_STOCK_KEYS, Shift, simStockKey, Stock, StockAlertSettings, Technician, WorkBreak, WorkSession } from '../types';
+import { ACCESSORY_STOCK_KEYS, Attendance, DEVICE_MODELS, emptyStock, Installation, InventoryAccount, Movement, PendingOperation, Role, SIM_PROVIDERS, SIM_STOCK_KEYS, Shift, simStockKey, Stock, StockAlertSettings, Technician, WorkBreak, WorkSession } from '../types';
 import { localToISO, nextDate, openingStock, stockAt, TIME_ZONE, validateOperation } from './domain';
 import { captureLocation } from './location';
+import { confirmJobArrival } from './arrival';
 import { addAuditToBatch, addAuditToTransaction, changedFields, type AuditActor } from './audit';
 
 export const iso = (v: any): string => typeof v === 'string' ? v : v?.toDate?.().toISOString() || new Date().toISOString();
@@ -45,7 +47,7 @@ export const mapInstallation = (id: string, d: any): Installation => ({
   unit_records:d.unit_records||undefined,device_model: d.device_model || d.device_type || '', device_imeis: d.device_imeis || (d.imei ? [d.imei] : []), sim_numbers: d.sim_numbers || (d.sim_number ? [d.sim_number] : []), sim_count: d.sim_count ?? (d.sim_number ? 1 : 0), sim_provider: d.sim_provider || undefined,
   customer_ref: d.customer_ref || d.customer_name || '', vehicle_ref: d.vehicle_ref || '', notes: d.notes || '',
   timestamp:(d.completed_at||d.timestamp)?iso(d.completed_at||d.timestamp):'', completed_at:(d.completed_at||d.timestamp)?iso(d.completed_at||d.timestamp):undefined, completion_latitude:d.completion_latitude, completion_longitude:d.completion_longitude, completion_accuracy_m:d.completion_accuracy_m, inspection_action:d.inspection_action,
-  completion_source:d.completion_source||undefined,completed_by_uid:d.completed_by_uid||undefined,completed_by_name:d.completed_by_name||undefined,completed_by_role:d.completed_by_role||undefined,completion_reason:d.completion_reason||undefined,online_status:d.online_status||'not_checked',online_status_updated_at:d.online_status_updated_at?iso(d.online_status_updated_at):undefined,online_status_updated_by:d.online_status_updated_by||undefined,
+  completion_source:d.completion_source||undefined,completed_by_uid:d.completed_by_uid||undefined,completed_by_name:d.completed_by_name||undefined,completed_by_role:d.completed_by_role||undefined,completion_reason:d.completion_reason||undefined,online_status:d.online_status||'not_checked',online_check_failures:Number(d.online_check_failures||0),online_status_updated_at:d.online_status_updated_at?iso(d.online_status_updated_at):undefined,online_status_updated_by:d.online_status_updated_by||undefined,
   legacy: !d.technician_id
 });
 const outbox = localforage.createInstance({ name: 'SecureTrackPWA', storeName: 'operations_v2' });
@@ -59,6 +61,7 @@ export async function queueOperation(op: PendingOperation) {
   validateOperation(op);
   await outbox.setItem(op.uid + ':' + op.id, op);
 }
+export async function removeQueuedOperation(op:Pick<PendingOperation,'uid'|'id'>){await outbox.removeItem(op.uid+':'+op.id)}
 export async function commitOperation(op: PendingOperation, user: Technician) {
   validateOperation(op);
   if (auth.currentUser?.uid !== op.uid || user.uid !== op.uid) throw new Error('Sign in to the account that saved this entry.');
@@ -77,9 +80,10 @@ export async function commitOperation(op: PendingOperation, user: Technician) {
     const assignmentRefs=[...(op.device_imeis||[]).map(value=>({kind:'imei' as const,value,ref:doc(db,'assignment_index',assignmentKey('imei',value))})),...(op.sim_numbers||[]).map(value=>({kind:'sim' as const,value,ref:doc(db,'assignment_index',assignmentKey('sim',value))}))],assignmentSnaps=await Promise.all(assignmentRefs.map(item=>tx.get(item.ref)));
     assignmentSnaps.forEach((snap,index)=>{const row=snap.data();if(snap.exists()&&row?.status==='active'&&row.vehicle!==op.vehicle_ref)throw new Error(`${assignmentRefs[index].kind==='imei'?'IMEI':'SIM'} ${assignmentRefs[index].value} is already assigned to ${row.vehicle}.`) });
     if (existing.exists()) throw new Error('This assignment has an incomplete inventory record. Contact an administrator.');
-    if (op.quantity + op.sim_count > 0) {
-      const balance={...emptyStock(),...(liveSnap.data()?.balance||{})} as Stock,simKey=simStockKey(op.sim_provider);if(op.quantity&&balance[op.device_model]<op.quantity)throw new Error(`Only ${balance[op.device_model]} ${op.device_model} remain in your confirmed stock.`);if(op.sim_count&&balance[simKey]<op.sim_count)throw new Error(`Only ${balance[simKey]} ${simKey} card${balance[simKey]===1?'':'s'} remain in your confirmed stock.`);if(op.quantity)balance[op.device_model]-=op.quantity;if(op.sim_count)balance[simKey]-=op.sim_count;tx.update(liveRef,{balance,updated_at:serverTimestamp()});
-      const movement = { technician_id: user.uid, technician_name: user.displayName || user.email, type: op.quantity ? 'installed' : 'sim-used', device_model: op.device_model, quantity: op.quantity, sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), timestamp: serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at)), notes: op.notes };
+    const relay12=op.relay_12v_count||0,relay24=op.relay_24v_count||0,wire=op.wire_count||0;
+    if (op.quantity + op.sim_count + relay12 + relay24 + wire > 0) {
+      const balance={...emptyStock(),...(liveSnap.data()?.balance||{})} as Stock,simKey=simStockKey(op.sim_provider);if(op.quantity&&balance[op.device_model]<op.quantity)throw new Error(`Only ${balance[op.device_model]} ${op.device_model} remain in your confirmed stock.`);if(op.sim_count&&balance[simKey]<op.sim_count)throw new Error(`Only ${balance[simKey]} ${simKey} card${balance[simKey]===1?'':'s'} remain in your confirmed stock.`);if(relay12&&balance['Relay 12V']<relay12)throw new Error(`Only ${balance['Relay 12V']} Relay 12V remain in your confirmed stock.`);if(relay24&&balance['Relay 24V']<relay24)throw new Error(`Only ${balance['Relay 24V']} Relay 24V remain in your confirmed stock.`);if(wire&&balance.Wire<wire)throw new Error(`Only ${balance.Wire} Wire remain in your confirmed stock.`);if(op.quantity)balance[op.device_model]-=op.quantity;if(op.sim_count)balance[simKey]-=op.sim_count;balance['Relay 12V']-=relay12;balance['Relay 24V']-=relay24;balance.Wire-=wire;tx.update(liveRef,{balance,updated_at:serverTimestamp()});
+      const movement = { technician_id: user.uid, technician_name: user.displayName || user.email, type: op.quantity ? 'installed' : 'sim-used', device_model: op.device_model, quantity: op.quantity, sim_count: op.sim_count, relay_12v_count:relay12,relay_24v_count:relay24,wire_count:wire, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), timestamp: serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at)), notes: op.notes };
       tx.set(moveRef, movement);
     }
     if (op.kind === 'installed' || op.kind === 'job-completed') {
@@ -88,7 +92,7 @@ export async function commitOperation(op: PendingOperation, user: Technician) {
       technician_id: user.uid, technician_name: user.displayName || user.email, device_model: op.device_model,
       shift_id: op.shift_id || '', job_type: op.job_type || 'new_installation', unit_count: op.unit_count||assigned?.data()?.unit_count||Math.max(op.quantity, op.sim_count, op.device_imeis?.length || 0, 1),
       ...(isVehicleCompletion?{unit_index:op.unit_index,progress_completed:siblingDocs.filter(snap=>snap.exists()).length+1,progress_total:op.progress_total,completed_by_uid:user.uid,completed_by_name:user.displayName||user.email}:{}),
-      ...(op.inspection_action?{inspection_action:op.inspection_action}:{}),...(op.unit_records?{unit_records:op.unit_records}:{}), device_imeis: op.device_imeis || [], sim_numbers: op.sim_numbers || [], sim_count: op.sim_count, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), customer_ref: op.customer_ref, vehicle_ref: op.vehicle_ref, notes: op.notes,
+      ...(op.inspection_action?{inspection_action:op.inspection_action}:{}),...(op.unit_records?{unit_records:op.unit_records}:{}), device_imeis: op.device_imeis || [], sim_numbers: op.sim_numbers || [], sim_count: op.sim_count, relay_12v_count:relay12,relay_24v_count:relay24,wire_count:wire, ...(op.sim_count ? {sim_provider:op.sim_provider} : {}), customer_ref: op.customer_ref, vehicle_ref: op.vehicle_ref, notes: op.notes,
       ...(op.payment_received_amount!==undefined?{payment_received_amount:op.payment_received_amount,payment_method:op.payment_method||'cash'}:{}),
       completion_latitude:op.completion_latitude,completion_longitude:op.completion_longitude,completion_accuracy_m:op.completion_accuracy_m,timestamp: serverTimestamp(),completed_at:serverTimestamp(), captured_at: Timestamp.fromDate(new Date(op.captured_at))
     });
@@ -108,21 +112,12 @@ export function syncOperations(user: Technician): Promise<void> {
   if (activeSync) return activeSync;
   activeSync = (async () => {
     if (!navigator.onLine) return;
-    let op = (await pending(user.uid))[0];
-    if (!op) return;
+    const operations=await pending(user.uid);
+    if (!operations.length) return;
     await ensureInventory(user);
-    while (op) {
-      let ready = op;
-      if(op.kind==='job-completed'&&op.job_type==='device_removal')ready={...op,unit_count:op.unit_count,device_model:'',quantity:0,sim_count:0,sim_provider:undefined};
-      if (op.kind === 'job-completed' && ![op.completion_latitude, op.completion_longitude, op.completion_accuracy_m].every(Number.isFinite)) {
-        const location = await captureLocation();
-        ready = { ...op, completion_latitude: location.latitude, completion_longitude: location.longitude, completion_accuracy_m: location.accuracy_m };
-        await outbox.setItem(ready.uid + ':' + ready.id, ready);
-      }
-      await commitOperation(ready, user);
-      await outbox.removeItem(ready.uid + ':' + ready.id);
-      op = (await pending(user.uid))[0];
-    }
+    const failures:string[]=[];
+    for(const op of operations){try{let ready=op;if(op.kind==='job-completed'&&op.job_type==='device_removal')ready={...op,unit_count:op.unit_count,device_model:'',quantity:0,sim_count:0,relay_12v_count:0,relay_24v_count:0,wire_count:0,sim_provider:undefined};if(op.kind==='job-completed'&&![op.completion_latitude,op.completion_longitude,op.completion_accuracy_m].every(Number.isFinite)){const location=await captureLocation();ready={...op,completion_latitude:location.latitude,completion_longitude:location.longitude,completion_accuracy_m:location.accuracy_m};await outbox.setItem(ready.uid+':'+ready.id,ready)}await commitOperation(ready,user);await removeQueuedOperation(ready)}catch(error:any){failures.push(`${op.shift_id||op.id}: ${error?.message||'could not sync'}`)}}
+    if(failures.length)throw new Error(`${failures.length} saved completion${failures.length===1?'':'s'} still need attention. ${failures.slice(0,2).join(' · ')}`);
   })().finally(() => { activeSync = null; });
   return activeSync;
 }
@@ -148,11 +143,25 @@ export async function updateShift(id:string,shift:Omit<Shift,'id'>,actor?:AuditA
   const refs=[...new Map([oldLock,newLock].filter(Boolean).map(ref=>[ref!.path,ref!])).values()];const lockSnaps=await Promise.all(refs.map(ref=>tx.get(ref)));const locks=new Map(lockSnaps.map(s=>[s.ref.path,s]));
   const jobReference=String(current.job_reference||id),end=shift.expected_end_at||new Date(minutes(shift.scheduled_at)+(shift.duration_minutes||60)*60000).toISOString();
   if(newLock){const snap=locks.get(newLock.path),entries={...(snap?.data()?.entries||{})};assertAvailable(entries,{...lockEntry(id,{...shift,expected_end_at:end},jobReference)},id)}
-  const next:any={...shift,version:currentVersion+1,expected_end_at:Timestamp.fromDate(new Date(end)),latitude:shift.latitude??deleteField(),longitude:shift.longitude??deleteField(),scheduled_at:Timestamp.fromDate(new Date(shift.scheduled_at)),window_start:Timestamp.fromDate(new Date(shift.window_start)),window_end:Timestamp.fromDate(new Date(shift.window_end)),updated_at:serverTimestamp(),updated_by_uid:actor?.uid||'',updated_by_name:actor?.displayName||actor?.email||''};
+  const next:any={...shift,...(current.status==='draft'&&shift.status==='assigned'?{assigned_at:serverTimestamp()}:{}),version:currentVersion+1,expected_end_at:Timestamp.fromDate(new Date(end)),latitude:shift.latitude??deleteField(),longitude:shift.longitude??deleteField(),scheduled_at:Timestamp.fromDate(new Date(shift.scheduled_at)),window_start:Timestamp.fromDate(new Date(shift.window_start)),window_end:Timestamp.fromDate(new Date(shift.window_end)),updated_at:serverTimestamp(),updated_by_uid:actor?.uid||'',updated_by_name:actor?.displayName||actor?.email||''};
   tx.update(shiftRef,next);
   if(oldLock){const snap=locks.get(oldLock.path),entries={...(snap?.data()?.entries||{})};delete entries[id];tx.set(oldLock,{technician_id:current.technician_id,date:current.date,entries,updated_at:serverTimestamp()},{merge:true})}
   if(newLock){const snap=locks.get(newLock.path),entries={...(snap?.data()?.entries||{})};entries[id]=lockEntry(id,{...shift,expected_end_at:end},jobReference);tx.set(newLock,{technician_id:shift.technician_id,date:shift.date,entries,updated_at:serverTimestamp()},{merge:true})}
   if(actor)addAuditToTransaction(tx,actor,current.technician_id===shift.technician_id?'EDITED':'REASSIGNED','Jobs',id,{company:shift.company_name,vehicle:(shift.vehicle_numbers||[]).join(' '),job_id:jobReference,changes:changedFields(current,shift,['technician_id','technician_name','company_name','contact_person','customer_phone','vehicle_numbers','job_type','unit_count','site_name','scheduled_at','duration_minutes','maps_url','job_notes','status'])});
+ });
+}
+export type CompletedJobDetails={company_name:string;customer_name:string;site_name:string;contact_person:string;customer_phone:string;vehicle_numbers:string[];maps_url:string;job_notes:string};
+export async function updateCompletedJobDetails(id:string,details:CompletedJobDetails,actor:AuditActor,expectedVersion:number){
+ const ref=doc(db,'shifts',id);
+ await runTransaction(db,async tx=>{
+  const snap=await tx.get(ref);if(!snap.exists())throw new Error('This completed job no longer exists.');const current=snap.data(),version=Number(current.version||1);
+  if(current.is_deleted)throw new Error('This job was archived.');
+  if(current.status!=='completed')throw new Error('Only completed jobs can be updated here.');
+  if(version!==expectedVersion)throw new Error(`This record was updated by ${current.updated_by_name||'another user'}. Review the latest information before saving.`);
+  const vehicleNumbers=details.vehicle_numbers.map(value=>value.trim()).filter(Boolean);
+  const next={company_name:details.company_name.trim(),customer_name:details.customer_name.trim(),site_name:details.site_name.trim(),contact_person:details.contact_person.trim(),customer_phone:details.customer_phone.trim(),vehicle_numbers:vehicleNumbers,vehicle_number:vehicleNumbers[0]||'',maps_url:details.maps_url.trim(),job_notes:details.job_notes.trim(),version:version+1,updated_at:serverTimestamp(),updated_by_uid:actor.uid,updated_by_name:actor.displayName||actor.email};
+  tx.update(ref,next);
+  addAuditToTransaction(tx,actor,'EDITED','Jobs',id,{company:next.company_name||next.customer_name,vehicle:vehicleNumbers.join(' '),job_id:current.job_reference||id,changes:changedFields(current,next,['company_name','customer_name','site_name','contact_person','customer_phone','vehicle_numbers','maps_url','job_notes'])});
  });
 }
 export async function deleteShift(id:string,actor:AuditActor,reason:string){
@@ -180,10 +189,7 @@ export async function adminCompleteJob(shift:Shift,actor:Technician,reason:strin
 }
 export async function checkIn(shift: Shift, coords: { latitude: number; longitude: number; accuracy_m: number }) {
   if (!navigator.onLine) throw new Error('Connect to the internet to confirm attendance. Attendance uses the server time.');
-  const batch=writeBatch(db);
-  batch.set(doc(db,'attendance_logs',shift.id),{technician_id:shift.technician_id,...coords,timestamp:serverTimestamp()});
-  batch.update(doc(db,'shifts',shift.id),{status:'in_progress',arrived_at:serverTimestamp()});
-  await batch.commit();
+  await confirmJobArrival(db,auth.currentUser?.uid||'',shift.id,coords);
 }
 export async function changeRole(uid: string, role: string,actor:AuditActor) {
   const ref=doc(db,'users',uid);await runTransaction(db,async tx=>{const current=await tx.get(ref);if(!current.exists())throw new Error('User account not found.');tx.update(ref,{role});addAuditToTransaction(tx,actor,'PERMISSION_CHANGED','Users',uid,{changes:changedFields(current.data(),{role},['role'])})});
@@ -271,13 +277,15 @@ export async function issueStock(user:Technician, op:Omit<PendingOperation,'uid'
  if(!profile.exists()||profile.data().role!=='technician'||profile.data().status==='deactivated')throw new Error('Choose an active technician.');
  if(!office.exists())throw new Error('Enter the office inventory before issuing technician stock.');
  const balance={...emptyStock(),...(office.data().balance||{})} as Stock;
+ const relay12=op.relay_12v_count||0,relay24=op.relay_24v_count||0,wire=op.wire_count||0;
  if(op.quantity&&op.device_model&&balance[op.device_model]<op.quantity)throw new Error(`Office stock has only ${balance[op.device_model]} ${op.device_model} unit${balance[op.device_model]===1?'':'s'}.`);
  const simKey=simStockKey(op.sim_provider);if(op.sim_count&&balance[simKey]<op.sim_count)throw new Error(`Office stock has only ${balance[simKey]} ${simKey} card${balance[simKey]===1?'':'s'}.`);
- if(op.quantity&&op.device_model)balance[op.device_model]-=op.quantity;if(op.sim_count)balance[simKey]-=op.sim_count;
+ if(relay12&&balance['Relay 12V']<relay12)throw new Error(`Office stock has only ${balance['Relay 12V']} Relay 12V.`);if(relay24&&balance['Relay 24V']<relay24)throw new Error(`Office stock has only ${balance['Relay 24V']} Relay 24V.`);if(wire&&balance.Wire<wire)throw new Error(`Office stock has only ${balance.Wire} Wire.`);
+ if(op.quantity&&op.device_model)balance[op.device_model]-=op.quantity;if(op.sim_count)balance[simKey]-=op.sim_count;balance['Relay 12V']-=relay12;balance['Relay 24V']-=relay24;balance.Wire-=wire;
  if(!existing.exists())tx.set(ref,{technician_id:user.uid,opening:openingStock({...profile.data(),uid:user.uid} as Technician),timestamp:serverTimestamp()});
- const technicianBalance={...emptyStock(),...(live.data()?.balance||{})} as Stock;if(op.quantity&&op.device_model)technicianBalance[op.device_model]+=op.quantity;if(op.sim_count)technicianBalance[simKey]+=op.sim_count;tx.set(liveRef,{technician_id:user.uid,balance:technicianBalance,updated_at:serverTimestamp()},{merge:true});
+ const technicianBalance={...emptyStock(),...(live.data()?.balance||{})} as Stock;if(op.quantity&&op.device_model)technicianBalance[op.device_model]+=op.quantity;if(op.sim_count)technicianBalance[simKey]+=op.sim_count;technicianBalance['Relay 12V']+=relay12;technicianBalance['Relay 24V']+=relay24;technicianBalance.Wire+=wire;tx.set(liveRef,{technician_id:user.uid,balance:technicianBalance,updated_at:serverTimestamp()},{merge:true});
  tx.update(officeRef,{balance,updated_at:serverTimestamp(),updated_by:auth.currentUser?.displayName||auth.currentUser?.email||'SecureTrack administrator',updated_by_uid:auth.currentUser?.uid||''});
- tx.set(movement,{technician_id:user.uid,technician_name:user.displayName||user.email,type:'received',device_model:op.device_model,quantity:op.quantity,sim_count:op.sim_count,...(op.device_imeis?.length?{device_imeis:op.device_imeis}:{}),...(op.sim_count?{sim_provider:op.sim_provider}:{}),notes:op.notes,timestamp:serverTimestamp(),captured_at:serverTimestamp()});});
+ tx.set(movement,{technician_id:user.uid,technician_name:user.displayName||user.email,type:'received',device_model:op.device_model,quantity:op.quantity,sim_count:op.sim_count,relay_12v_count:relay12,relay_24v_count:relay24,wire_count:wire,...(op.device_imeis?.length?{device_imeis:op.device_imeis}:{}),...(op.sim_count?{sim_provider:op.sim_provider}:{}),notes:op.notes,timestamp:serverTimestamp(),captured_at:serverTimestamp()});});
 }
 
 export async function saveCompanyInventory(current:Stock,target:Stock,notes:string,userName:string,userId:string){
@@ -291,17 +299,14 @@ export async function adjustInventory(user:Technician,current:Stock,target:Stock
  if(!notes.trim())throw new Error('Enter a reason for the inventory correction.');
  const changes:[string,number,'device'|'sim'][]=[];
  DEVICE_MODELS.forEach(key=>{const delta=target[key]-current[key];if(delta)changes.push([key,delta,'device'])});
+ ACCESSORY_STOCK_KEYS.forEach(key=>{const delta=(target[key]||0)-(current[key]||0);if(delta)changes.push([key,delta,'device'])});
  SIM_STOCK_KEYS.forEach(key=>{const delta=target[key]-current[key];if(delta)changes.push([key,delta,'sim'])});
  if(!changes.length)throw new Error('No inventory quantities were changed.');
  const batch=writeBatch(db);batch.set(doc(db,'technician_live_stock',user.uid),{technician_id:user.uid,balance:target,updated_at:serverTimestamp()},{merge:true});for(const[key,delta,kind]of changes){const provider=kind==='sim'&&key!=='SIM'?SIM_PROVIDERS.find(value=>key===`SIM ${value}`):undefined;batch.set(doc(collection(db,'inventory_logs')),{technician_id:user.uid,technician_name:user.displayName||user.email,type:'adjustment',device_model:kind==='device'?key:'',quantity:0,sim_count:0,quantity_delta:kind==='device'?delta:0,sim_delta:kind==='sim'?delta:0,...(provider?{sim_provider:provider}:{}),timestamp:serverTimestamp(),captured_at:serverTimestamp(),notes:notes.trim()})}await batch.commit();
 }
 export async function saveStockAlertThreshold(settings:StockAlertSettings){await setDoc(doc(db,'settings','stock_alerts'),{threshold:Math.max(0,Math.min(10000,Math.floor(settings.threshold))),device_minimums:minimumMap(settings.device_minimums),sim_minimums:minimumMap(settings.sim_minimums),clock_in_time:settings.clock_in_time,clock_out_time:settings.clock_out_time,late_grace_minutes:Math.max(0,Math.min(180,Math.floor(settings.late_grace_minutes))),max_break_minutes:Math.max(1,Math.min(240,Math.floor(settings.max_break_minutes))),updated_at:serverTimestamp()},{merge:true});}
 
-function scheduledClock(value:any){const date=value?.toDate?.()||new Date(value);if(!Number.isFinite(date.getTime()))return'09:00';const parts=new Intl.DateTimeFormat('en-GB',{timeZone:TIME_ZONE,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(date),part=(name:string)=>parts.find(item=>item.type===name)?.value||'00';return`${part('hour')}:${part('minute')}`}
 export async function carryForwardOverdueJobs(shifts:Shift[],_installations:Installation[],today:string,actor:Technician){
- if(!['master_admin','admin'].includes(actor.role)||!navigator.onLine)return 0;
- const targets=shifts.filter(shift=>shift.date<today&&shift.status!=='completed'&&(shift.completed_units||0)<shift.unit_count);let moved=0;
- for(const target of targets){let attempts=0;while(attempts++<366){const advanced=await runTransaction(db,async tx=>{const ref=doc(db,'shifts',target.id),snap=await tx.get(ref);if(!snap.exists())return false;const current=snap.data();if(current.status==='completed'||current.status==='draft'||current.is_deleted||String(current.date||'')>=today)return false;const from=String(current.date||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(from))return false;const to=nextDate(from),clock=scheduledClock(current.scheduled_at),oldLock=doc(db,'schedule_locks',scheduleLockId(current.technician_id,from)),newLock=doc(db,'schedule_locks',scheduleLockId(current.technician_id,to)),oldSnap=await tx.get(oldLock),newSnap=await tx.get(newLock),scheduled=localToISO(to,clock),expected=new Date(new Date(scheduled).valueOf()+Number(current.duration_minutes||60)*60000).toISOString(),entries={...(newSnap.data()?.entries||{})},entry={shift_id:target.id,job_reference:current.job_reference||'',start_at:scheduled,end_at:expected,company:current.company_name||current.customer_name||'',location:current.site_name||''};assertAvailable(entries,entry,target.id);entries[target.id]=entry;const oldEntries={...(oldSnap.data()?.entries||{})};delete oldEntries[target.id];const history=doc(db,'job_schedule_history',`${target.id}_${to}`);tx.update(ref,{date:to,scheduled_at:Timestamp.fromDate(new Date(scheduled)),expected_end_at:Timestamp.fromDate(new Date(expected)),window_start:Timestamp.fromDate(new Date(localToISO(to,'00:00'))),window_end:Timestamp.fromDate(new Date(localToISO(nextDate(to),'00:00'))),original_scheduled_date:current.original_scheduled_date||from,carried_forward:true,carried_forward_count:Number(current.carried_forward_count||0)+1,last_carried_forward_from:from,last_carried_forward_at:serverTimestamp(),version:Number(current.version||1)+1,updated_by_uid:actor.uid,updated_by_name:actor.displayName||actor.email,updated_at:serverTimestamp()});tx.set(oldLock,{technician_id:current.technician_id,date:from,entries:oldEntries,updated_at:serverTimestamp()},{merge:true});tx.set(newLock,{technician_id:current.technician_id,date:to,entries,updated_at:serverTimestamp()},{merge:true});tx.set(history,{shift_id:target.id,job_reference:current.job_reference||'',vehicle_numbers:current.vehicle_numbers||[current.vehicle_number||''],from_date:from,to_date:to,action:`Automatically carried forward from ${from} to ${to}.`,changed_by:'SecureTrack automatic carry-forward',changed_by_uid:actor.uid,changed_at:serverTimestamp()},{merge:false});addAuditToTransaction(tx,actor,'EDITED','Jobs',target.id,{company:current.company_name,vehicle:(current.vehicle_numbers||[]).join(' '),job_id:current.job_reference,changes:{date:{old:from,new:to}}});return true});if(!advanced)break;moved++}
- }
- return moved;
+ if(!navigator.onLine)return {moved:0,conflicts:[]};
+ return carryForwardJobs(db,shifts,today,actor,(tx,user,id,current,to)=>addAuditToTransaction(tx,user,'EDITED','Jobs',id,{company:current.company_name,vehicle:(current.vehicle_numbers||[]).join(' '),job_id:current.job_reference,changes:{date:{old:current.date,new:to}}}));
 }

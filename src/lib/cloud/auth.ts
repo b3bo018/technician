@@ -22,7 +22,7 @@ async function refresh(){
 }
 setTokenProvider(refresh);
 export const auth={get currentUser(){return session?.user||null}};
-export function onAuthStateChanged(_auth:any,listener:AuthListener){listeners.add(listener);queueMicrotask(()=>listener(session?.user||null));return()=>listeners.delete(listener)}
+export function onAuthStateChanged(_auth:any,listener:AuthListener){listeners.add(listener);queueMicrotask(()=>listener(session?.user||null));return()=>{listeners.delete(listener)}}
 export async function signInWithEmailAndPassword(_auth:any,email:string,password:string){const data=await call('/v1/auth/login',{email,password});save({user:data.user,accessToken:data.accessToken,refreshToken:data.refreshToken,expiresAt:Date.now()+Number(data.expiresIn||3600)*1000});return{user:data.user}}
 export async function signOut(_auth:any){try{if(session)await call('/v1/auth/logout',{})}finally{save(null)}}
 export async function sendPasswordResetEmail(_auth:any,email:string){await call('/v1/auth/forgot-password',{email})}

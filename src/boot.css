@@ -1,0 +1,5 @@
+.boot-brand-wrap{position:relative;display:grid;place-items:center;width:min(390px,82vw);isolation:isolate}
+.boot-brand{position:relative;z-index:1;width:100%;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.boot-brand img{mix-blend-mode:multiply}
+.boot-map{z-index:-1;width:min(350px,78vw);height:min(350px,78vw)}
+@media(max-width:520px){.boot-brand-wrap{width:min(330px,86vw)}.boot-map{width:min(300px,78vw);height:min(300px,78vw)}}
