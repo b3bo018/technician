@@ -36,6 +36,15 @@ test('technician completion notifications are limited to recognized admin notice
   assert.equal(canWrite(technician, 'operational_notifications', 'other-3', { ...notification, recipient_roles: ['technician'] }, null, 'set'), false);
 });
 
+test('operational notifications are readable only by intended recipients', () => {
+  const technician = { uid: 'tech-1', role: 'technician', status: 'active' };
+  const hr = { uid: 'hr-1', role: 'hr', status: 'active' };
+  assert.equal(canRead(technician, 'operational_notifications', 'n-1', { recipient_uids: ['tech-1'] }), true);
+  assert.equal(canRead(technician, 'operational_notifications', 'n-2', { recipient_roles: ['hr'] }), false);
+  assert.equal(canRead(hr, 'operational_notifications', 'n-2', { recipient_roles: ['hr'] }), true);
+  assert.equal(canRead(hr, 'operational_notifications', 'n-3', { recipient_uids: ['other'] }), false);
+});
+
 test('technician write scope remains limited to their own records', () => {
   assert.equal(canWrite(technician, 'attendance_logs', 'job-1', { technician_id: technician.uid }, null, 'set'), true);
   assert.equal(canWrite(technician, 'attendance_logs', 'job-1', { technician_id: 'tech-2' }, null, 'set'), false);

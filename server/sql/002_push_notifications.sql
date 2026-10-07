@@ -26,3 +26,8 @@ CREATE TABLE IF NOT EXISTS push_outbox (
   UNIQUE (user_id, event_key)
 );
 CREATE INDEX IF NOT EXISTS push_outbox_pending_idx ON push_outbox(available_at, id) WHERE sent_at IS NULL;
+
+-- The API connects as the dedicated `securetrack` database role. Keep its
+-- access limited to the push queue and subscription tables it must operate.
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE push_outbox, push_subscriptions TO securetrack;
+GRANT USAGE, SELECT ON SEQUENCE push_outbox_id_seq TO securetrack;

@@ -64,7 +64,13 @@ export function canRead(actor: Actor, collection: string, id: string, data: any)
       return own(actor, data) || isStaff(actor);
     case 'company_inventory': case 'company_inventory_history': case 'assignment_index':
     case 'job_online_status_history': case 'job_schedule_history': case 'device_models':
-    case 'operational_notifications': return isStaff(actor);
+      return isStaff(actor);
+    case 'operational_notifications': {
+      const uids = Array.isArray(data?.recipient_uids) ? data.recipient_uids.map(String) : [];
+      const roles = Array.isArray(data?.recipient_roles) ? data.recipient_roles.map(String) : [];
+      return uids.includes(actor.uid) || roles.includes(actor.role)
+        || (isStaff(actor) && uids.length === 0 && roles.length === 0);
+    }
     case 'agreement_settings': case 'agreement_packages': case 'agreements': case 'agreement_links':
       return agreementStaff.has(actor.role);
     case 'certificates': case 'certificate_status_history': case 'certificate_payment_history':

@@ -64,10 +64,24 @@ export async function enqueuePush(client: Pool | PoolClient, userId: string, eve
   const body = notification.body.trim().slice(0, 500);
   const url = notification.url?.startsWith('/') && !notification.url.startsWith('//') ? notification.url.slice(0, 300) : '/';
   if (!userId || !eventKey || !title || !body) return;
-  await client.query(
+  const queued = await client.query(
     `INSERT INTO push_outbox(user_id,event_key,title,body,target_url) VALUES($1,$2,$3,$4,$5)
-     ON CONFLICT(user_id,event_key) DO NOTHING`,
+     ON CONFLICT(user_id,event_key) DO NOTHING RETURNING id`,
     [userId, eventKey.slice(0, 240), title, body, url],
+  );
+  if (!queued.rowCount || eventKey.startsWith('operation:')) return;
+
+  const type = title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 80) || 'operations_update';
+  const targetSection = (() => { try { return new URL(url, 'https://connect.securetrackgo.com').searchParams.get('section') || ''; } catch { return ''; } })();
+  const id = `push_${createHash('sha256').update(`${userId}:${eventKey}`).digest('hex')}`;
+  const data = {
+    type, message: body, created_at: new Date().toISOString(), read_by: [],
+    recipient_roles: [], recipient_uids: [userId], target_section: targetSection,
+  };
+  await client.query(
+    `INSERT INTO documents(collection,id,data,version,created_at,updated_at)
+     VALUES('operational_notifications',$1,$2,1,now(),now()) ON CONFLICT(collection,id) DO NOTHING`,
+    [id, data],
   );
 }
 
