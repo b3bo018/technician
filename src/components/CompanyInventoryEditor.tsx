@@ -1,11 +1,11 @@
 import { FormEvent, useState } from 'react';
 import { Save, X } from 'lucide-react';
-import { ACCESSORY_STOCK_KEYS, DEVICE_MODELS, SIM_STOCK_KEYS, Stock } from '../types';
+import { ACCESSORY_STOCK_KEYS, ACTIVE_DEVICE_MODELS, isActiveDeviceModel, SIM_STOCK_KEYS, Stock } from '../types';
 import { saveCompanyInventory } from '../lib/data';
 import { useDeviceModels } from './DeviceManagement';
 
 export function CompanyInventoryEditor({current,userName,userId,onClose}:{current:Stock;userName:string;userId:string;onClose:()=>void}){
- const catalogue=useDeviceModels(true);const models=[...new Set([...DEVICE_MODELS,...catalogue.filter(item=>item.status!=='archived').map(item=>item.name)])];
+ const catalogue=useDeviceModels(true);const models=[...new Set([...ACTIVE_DEVICE_MODELS,...catalogue.filter(item=>item.status!=='archived'&&isActiveDeviceModel(item.name)).map(item=>item.name)])];
  const [target,setTarget]=useState<Stock>({...current}),[notes,setNotes]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const field=(key:string,label:string=key)=><label key={key}>{label}<input type="number" min="0" max="100000" step="1" value={target[key]||0} onChange={e=>setTarget(value=>({...value,[key]:Math.max(0,Math.min(100000,Number(e.target.value)||0))}))}/><small>Current: {current[key]||0}</small></label>;
  async function submit(e:FormEvent){e.preventDefault();setBusy(true);setError('');try{await saveCompanyInventory(current,target,notes,userName,userId);onClose()}catch(err:any){setError(err.message)}finally{setBusy(false)}}

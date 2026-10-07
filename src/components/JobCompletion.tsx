@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Circle, MapPin, QrCode, Radio, ScanBarcode } from 'lucide-react';
 import { BarcodeScanner, requestRearCamera } from './BarcodeScanner';
-import { DEVICE_MODELS, DeviceModel, InspectionAction, Installation, PendingOperation, Shift, SIM_PROVIDERS, SimProvider, UnitJobType, inspectionLabel, jobLabel } from '../types';
+import { ACTIVE_DEVICE_MODELS, DeviceModel, InspectionAction, Installation, isActiveDeviceModel, PendingOperation, Shift, SIM_PROVIDERS, SimProvider, UnitJobType, inspectionLabel, jobLabel } from '../types';
 import { captureLocation } from '../lib/location';
 import { useDeviceModels } from './DeviceManagement';
 import { isValidIccid } from '../lib/identifiers';
@@ -12,7 +12,7 @@ const deviceNeeded=(action:string)=>stockDeviceNeeded(action)||action==='device_
 const simNeeded=(action:string)=>['new_installation','sim_change','sim_device_change'].includes(action);
 
 export function JobCompletion({shift,completedUnits,save,onDone}:{shift:Shift;completedUnits:Installation[];save:(op:Omit<PendingOperation,'uid'|'captured_at'>)=>Promise<void>;onDone:(finished:boolean)=>void}) {
- const catalogue=useDeviceModels();const deviceModels=[...new Set([...DEVICE_MODELS,...catalogue.map(item=>item.name)])];
+ const catalogue=useDeviceModels();const deviceModels=[...new Set([...ACTIVE_DEVICE_MODELS,...catalogue.map(item=>item.name).filter(isActiveDeviceModel)])];
  const assigned=useMemo(()=>Array.from({length:shift.unit_count},(_,index)=>shift.unit_jobs?.[index]||{vehicle_number:shift.vehicle_numbers?.[index]||shift.vehicle_number||'',job_type:(shift.job_type==='mixed'?'inspection':shift.job_type) as UnitJobType}),[shift]);
  const completedIndexes=useMemo(()=>new Set(completedUnits.map(item=>item.unit_index).filter((value):value is number=>Number.isInteger(value))),[completedUnits]);
  const awaitingVerification=useMemo(()=>[...completedUnits].sort((a,b)=>(a.unit_index||0)-(b.unit_index||0)).find(item=>item.online_status!=='showing_online'),[completedUnits]);

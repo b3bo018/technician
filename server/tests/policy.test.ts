@@ -51,6 +51,16 @@ test('technician write scope remains limited to their own records', () => {
   assert.equal(canWrite(technician, 'shifts', 'job-1', { technician_id: technician.uid, status: 'assigned' }, { technician_id: technician.uid, status: 'assigned' }, 'update'), false);
 });
 
+test('renewal call notes are visible to sales staff and immutable after creation', () => {
+  const manager: Actor = { uid: 'manager-1', role: 'manager', status: 'active' };
+  const call = { renewal_id: 'renewal-1', contact_date: '2026-10-07', outcome: 'Callback requested', remark: 'Call again next week', actor_uid: manager.uid };
+  assert.equal(canRead(manager, 'renewal_contact_logs', 'call-1', call), true);
+  assert.equal(canWrite(manager, 'renewal_contact_logs', 'call-1', call, null, 'set'), true);
+  assert.equal(canWrite(manager, 'renewal_contact_logs', 'call-1', call, call, 'update'), false);
+  assert.equal(canWrite(manager, 'renewal_contact_logs', 'call-1', { ...call, actor_uid: 'other-user' }, null, 'set'), false);
+  assert.equal(canRead(technician, 'renewal_contact_logs', 'call-1', call), false);
+});
+
 test('manager verification can change only online status and cannot override a final result', () => {
   const manager: Actor = { uid: 'manager-1', role: 'manager', status: 'active' };
   const existing = { technician_id: technician.uid, online_status: 'not_checked', online_check_failures: 0, vehicle_ref: 'A123' };

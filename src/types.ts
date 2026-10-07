@@ -1,5 +1,8 @@
 export const DEVICE_MODELS = ['FMC920', 'FMC130', 'FMC125', 'FMM130', 'FMM125', 'Jimi VL03', 'GT06', 'GT06N', 'LV02', 'Ruptela'] as const;
 export type DeviceModel = typeof DEVICE_MODELS[number];
+// LV02 remains part of the historical data model, but is no longer offered as active stock.
+export const ACTIVE_DEVICE_MODELS = ['FMC920', 'FMC130', 'FMC125', 'FMM130', 'FMM125', 'Jimi VL03', 'GT06', 'GT06N', 'Ruptela'] as const;
+export const isActiveDeviceModel = (model: string) => (ACTIVE_DEVICE_MODELS as readonly string[]).includes(model);
 export const SIM_PROVIDERS = ['Etisalat', 'du', 'International'] as const;
 export type SimProvider = typeof SIM_PROVIDERS[number];
 export type SimStockKey = 'SIM' | `SIM ${SimProvider}`;

@@ -12,7 +12,7 @@ test('server evaluates workday, break, job reminder, inventory, certificate, and
     ['shifts','job-1',{technician_id:'tech-1',status:'assigned',date:'2026-01-01',scheduled_at:'2026-01-01T06:25:00.000Z'}],
     ['shifts','job-old',{technician_id:'tech-1',status:'assigned',carried_forward:true,date:'2025-12-31',scheduled_at:'2025-12-31T06:00:00.000Z'}],
     ['work_breaks','break-1',{technician_id:'tech-1',status:'active',started_at:'2026-01-01T05:30:00.000Z'}],
-    ['inventory_accounts','tech-1',{opening:{FMC920:0}}],
+    ['inventory_accounts','tech-1',{opening:{FMC920:0,LV02:0}}],
     ['certificates','cert-expired',{expiry_date:'2025-12-20'}],
     ['certificates','cert-soon',{expiry_date:'2026-01-20'}],
   ].map(([collection,id,data])=>({collection,id,data}));
@@ -30,6 +30,7 @@ test('server evaluates workday, break, job reminder, inventory, certificate, and
   assert.equal(has('long-break:break-1','tech-1'),true);
   assert.equal(has('job-reminder:job-1:2026-01-01T06:25:00.000Z','tech-1'),true);
   assert.equal(queued.some((row)=>row.key.startsWith('low-stock:tech-1:FMC920:2')),true);
+  assert.equal(queued.some((row)=>row.key.startsWith('low-stock:tech-1:LV02:')),false);
   assert.equal(has('certificate-expiry:2026-01-01','admin-1'),true);
   assert.equal(has('carry-forward:2026-01-01','admin-1'),true);
 });

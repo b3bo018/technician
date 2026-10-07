@@ -3,6 +3,7 @@ export type Actor = { uid: string; role: string; status: string };
 const staff = new Set(['master_admin', 'owner', 'admin', 'manager', 'accountant', 'hr', 'it']);
 const agreementStaff = new Set(['master_admin', 'owner', 'admin', 'accountant', 'hr']);
 const certificateStaff = new Set(['master_admin', 'owner', 'admin', 'manager', 'accountant']);
+const renewalStaff = new Set(['master_admin', 'owner', 'admin', 'manager', 'accountant']);
 const stockAdmin = new Set(['master_admin', 'admin', 'accountant']);
 const assigner = new Set(['master_admin', 'admin']);
 
@@ -74,8 +75,9 @@ export function canRead(actor: Actor, collection: string, id: string, data: any)
     case 'agreement_settings': case 'agreement_packages': case 'agreements': case 'agreement_links':
       return agreementStaff.has(actor.role);
     case 'certificates': case 'certificate_status_history': case 'certificate_payment_history':
-    case 'certificate_edit_history': case 'certificate_settings': case 'renewals':
+    case 'certificate_edit_history': case 'certificate_settings':
       return certificateStaff.has(actor.role);
+    case 'renewals': case 'renewal_contact_logs': return renewalStaff.has(actor.role);
     case 'audit_events': return actor.role === 'master_admin';
     case 'error_logs': return ['master_admin', 'admin'].includes(actor.role);
     case 'settings': return true;
@@ -100,7 +102,12 @@ export function canWrite(actor: Actor, collection: string, id: string, next: any
   if (['login_logs', 'attendance_logs', 'work_sessions', 'work_breaks'].includes(collection)) return own(actor, next || existing) || actor.role === 'master_admin' || actor.role === 'hr';
   if (['agreement_settings', 'agreement_packages'].includes(collection)) return ['master_admin', 'admin'].includes(actor.role);
   if (collection === 'agreements' || collection === 'agreement_links') return ['master_admin', 'admin', 'hr'].includes(actor.role);
-  if (['certificates', 'certificate_status_history', 'certificate_payment_history', 'certificate_edit_history', 'renewals'].includes(collection)) return ['master_admin', 'admin', 'manager', 'accountant'].includes(actor.role);
+  if (['certificates', 'certificate_status_history', 'certificate_payment_history', 'certificate_edit_history'].includes(collection)) return ['master_admin', 'admin', 'manager', 'accountant'].includes(actor.role);
+  if (collection === 'renewals') return renewalStaff.has(actor.role);
+  if (collection === 'renewal_contact_logs') return renewalStaff.has(actor.role) && op === 'set'
+    && next?.actor_uid === actor.uid && typeof next?.renewal_id === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(String(next?.contact_date || ''))
+    && typeof next?.remark === 'string' && next.remark.trim().length > 0 && next.remark.length <= 2000;
   if (collection === 'certificate_settings' || collection === 'device_models') return ['master_admin', 'admin'].includes(actor.role);
   if (collection === 'audit_events') return next?.actor_uid === actor.uid;
   if (collection === 'job_online_status_history') return ['master_admin', 'admin', 'manager', 'hr'].includes(actor.role) && op === 'set' && next?.changed_by_uid === actor.uid;

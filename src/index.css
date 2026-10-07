@@ -297,3 +297,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* Agreement pricing table without a separate unit column. */
 .exact-commercial-grid .commercial-header,.exact-commercial-grid .commercial-row{grid-template-columns:9mm minmax(0,1fr) 12mm 22mm 22mm}
 @media(max-width:700px){.exact-commercial-grid .commercial-header,.exact-commercial-grid .commercial-row{grid-template-columns:7% 52% 10% 15% 16%}}
+
+.renewal-pricing-table{min-width:1180px}.renewal-pricing-table td:nth-child(8)>strong,.renewal-pricing-table td:nth-child(8)>small{white-space:normal;overflow-wrap:anywhere}

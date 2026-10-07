@@ -1,10 +1,10 @@
 import { ChangeEvent, useState } from 'react';
 import ExcelJS from 'exceljs';
-import { DEVICE_MODELS, emptyStock, Stock, Technician } from '../types';
+import { ACTIVE_DEVICE_MODELS, emptyStock, Stock, Technician } from '../types';
 import { adjustInventory } from '../lib/data';
 import { saveDownload } from '../lib/download';
 
-const columns=['Technician name','Technician email',...DEVICE_MODELS,'SIM Etisalat','SIM du','SIM International','SIM'];
+const columns=['Technician name','Technician email',...ACTIVE_DEVICE_MODELS,'SIM Etisalat','SIM du','SIM International','SIM'];
 export function InventoryImport({technicians,balances,onDone}:{technicians:Technician[];balances:{tech:Technician;stock:Stock|null}[];onDone:()=>void}){
  const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');
  async function template(){const b=new ExcelJS.Workbook();const s=b.addWorksheet('Inventory import');s.addRow(columns);s.addRow(['Example Technician','technician@example.com',0,0,0,0,0,0,0,0,0,0,0,0]);s.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};s.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF146B50'}};s.columns=columns.map(key=>({width:Math.max(16,key.length+2)}));await saveDownload(new Blob([await b.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'SecureTrack_Inventory_Import_Template.xlsx','SecureTrack inventory template')}

@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { enqueueForRecipients, enqueuePush } from './push.js';
 
 const TZ = 'Asia/Dubai';
-const DEVICE_KEYS = ['FMC920','FMC130','FMC125','FMM130','FMM125','Jimi VL03','GT06','GT06N','LV02','Ruptela','Relay 12V','Relay 24V','Wire'];
+const DEVICE_KEYS = ['FMC920','FMC130','FMC125','FMM130','FMM125','Jimi VL03','GT06','GT06N','Ruptela','Relay 12V','Relay 24V','Wire'];
 const SIM_KEYS = ['SIM Etisalat','SIM du','SIM International','SIM'];
 type Row = { id: string; data: any };
 function records(rows: any[]): Row[] { return rows.map((row) => ({ id: String(row.id), data: row.data || {} })); }
@@ -61,7 +61,7 @@ export async function runNotificationRules(pool: Pool, now = new Date()) {
     for(const [key,value] of Object.entries(stock)){
       const minimum=Math.max(0,Number((key.startsWith('SIM')?config.sim_minimums?.[key]:config.device_minimums?.[key])??config.threshold??2));if(value>minimum)continue;
       const body=`${String(tech.data.displayName||tech.data.email||'Technician')}: ${key} has ${value} remaining (minimum ${minimum}).`;
-      for(const recipient of [...staff,...(users.find((row)=>row.id===tech.id)?[tech]:[])])await enqueuePush(pool,recipient.id,`low-stock:${tech.id}:${key}:${minimum}`,{title:'Low stock alert',body,url:'/?section=inventory'});
+      for(const recipient of [...staff,...(users.find((row)=>row.id===tech.id)?[tech]:[])])await enqueuePush(pool,recipient.id,`low-stock:${tech.id}:${key}:${minimum}:${value}:${today}`,{title:'Low stock alert',body,url:'/?section=inventory'});
     }
   }
 

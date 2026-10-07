@@ -1,12 +1,12 @@
 import { FormEvent, useRef, useState } from 'react';
 import { Check, PackagePlus, QrCode, Wrench } from 'lucide-react';
-import { DEVICE_MODELS, DeviceModel, PendingOperation, SIM_PROVIDERS, SimProvider } from '../types';
+import { ACTIVE_DEVICE_MODELS, DeviceModel, isActiveDeviceModel, PendingOperation, SIM_PROVIDERS, SimProvider } from '../types';
 import { validateOperation } from '../lib/domain';
 import { BarcodeScanner, requestRearCamera } from './BarcodeScanner';
 import { useDeviceModels } from './DeviceManagement';
 
 export function EntryForm({ installation, save }: { installation: boolean; save: (op: Omit<PendingOperation, 'uid' | 'id' | 'captured_at'>) => Promise<void> }) {
- const catalogue=useDeviceModels();const deviceModels=[...new Set([...DEVICE_MODELS,...catalogue.map(item=>item.name)])];
+ const catalogue=useDeviceModels();const deviceModels=[...new Set([...ACTIVE_DEVICE_MODELS,...catalogue.map(item=>item.name).filter(isActiveDeviceModel)])];
  const [model,setModel]=useState<DeviceModel|''>('FMC920');const [quantity,setQuantity]=useState(1);const [sims,setSims]=useState(0);const [relay12,setRelay12]=useState(0);const [relay24,setRelay24]=useState(0);const [wire,setWire]=useState(0);const [simProvider,setSimProvider]=useState<SimProvider>('Etisalat');const [customer,setCustomer]=useState('');const [vehicle,setVehicle]=useState('');const [notes,setNotes]=useState('');const [deviceImeis,setDeviceImeis]=useState<string[]>([]);const [scannerOpen,setScannerOpen]=useState(false);const cameraRequest=useRef<Promise<MediaStream>|null>(null);
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [success,setSuccess]=useState('');
  function scanDevice(){cameraRequest.current=requestRearCamera();setScannerOpen(true)}
