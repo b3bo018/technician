@@ -28,7 +28,8 @@ public class SecureTrackLocationPlugin extends Plugin {
         if(uid.isEmpty()||uid.length()>128||token.isEmpty()||refresh.isEmpty()||!sessionId.startsWith(uid+"_")||sessionId.length()>160||trackingId.isEmpty()||trackingId.length()>200){call.reject("Sign in again before starting workday location sharing.");return;}
         try {
             JSONObject session=new JSONObject().put("uid",uid).put("token",token).put("refreshToken",refresh)
-                .put("sessionId",sessionId).put("trackingSessionId",trackingId).put("interval",Math.max(5,Math.min(60,call.getInt("updateIntervalSeconds",15))));
+                .put("sessionId",sessionId).put("trackingSessionId",trackingId).put("startedElapsed",android.os.SystemClock.elapsedRealtime())
+                .put("interval",Math.max(5,Math.min(60,call.getInt("updateIntervalSeconds",15))));
             LocationSession.save(getContext(),session);
             getContext().getSharedPreferences("location-status",0).edit().putBoolean("paused",false).apply();
             ContextCompat.startForegroundService(getContext(),new Intent(getContext(),WorkdayLocationService.class));call.resolve();

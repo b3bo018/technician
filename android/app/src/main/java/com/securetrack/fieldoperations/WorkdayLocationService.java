@@ -71,6 +71,7 @@ public class WorkdayLocationService extends Service implements LocationListener 
         try{worker.execute(()->{try{
             if(!active||!hasLocation())return;JSONObject session=LocationSession.load(this);if(session==null){stopSelf();return;}
             long age=(SystemClock.elapsedRealtimeNanos()-fix.getElapsedRealtimeNanos())/1000000;
+            if(fix.getElapsedRealtimeNanos()/1000000<session.optLong("startedElapsed",0))return;
             if(!FreshLocation.valid(fix.getLatitude(),fix.getLongitude(),fix.getAccuracy(),age)){notice("Waiting for a fresh GPS update");return;}
             if(SystemClock.elapsedRealtime()-uploadedAt<session.optInt("interval",15)*1000L)return;
             JSONObject consent=authorized(session,"/v1/locations/consent",null);
@@ -97,5 +98,4 @@ public class WorkdayLocationService extends Service implements LocationListener 
     @Override public void onDestroy(){active=false;running=false;if(locations!=null)try{locations.removeUpdates(this);}catch(SecurityException ignored){}if(worker!=null)worker.shutdownNow();stopForeground(STOP_FOREGROUND_REMOVE);super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
 }
-
 
