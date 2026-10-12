@@ -3,7 +3,7 @@ import { nativeLocationSession, pushApi } from './cloud/auth';
 
 const NativeLocation=registerPlugin<{
  start(options:{uid:string;token:string;refreshToken:string;sessionId:string;trackingSessionId:string;updateIntervalSeconds:number}):Promise<void>;
- stop():Promise<void>;
+ stop(options:{pause:boolean}):Promise<void>;
  status():Promise<{running:boolean;paused:boolean;uid?:string;sessionId?:string}>;
 }>('SecureTrackLocation');
 async function request(path:string,body?:unknown){
@@ -23,5 +23,5 @@ export const workdayLocation={
   try{await NativeLocation.start({...credentials,sessionId,trackingSessionId:tracking.trackingSessionId,updateIntervalSeconds:tracking.updateIntervalSeconds})}
   catch(error){await request('/v1/locations/stop',{sessionId,trackingSessionId:tracking.trackingSessionId}).catch(()=>{});throw error}
  },
- async stop(){if(Capacitor.getPlatform()==='android')await NativeLocation.stop()},
+ async stop(pause=false){if(Capacitor.getPlatform()==='android')await NativeLocation.stop({pause})},
 };

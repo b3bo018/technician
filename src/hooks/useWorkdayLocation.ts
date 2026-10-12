@@ -23,6 +23,6 @@ export function useWorkdayLocation(profile:Technician,session?:WorkSession){
   void check();const timer=setInterval(()=>void check(),30000);return()=>{stopped=true;generation.current++;clearInterval(timer)};
  },[supported,profile.uid,profile.role,profile.status,session?.id,session?.status]);
  async function enable(){if(busy.current||session?.status!=='active')return;busy.current=true;setError('');try{await workdayLocation.grant();setConsent(true);await workdayLocation.start(profile.uid,session.id);setSharing(true)}catch(e){setError(e instanceof Error?e.message:'Could not start location sharing.')}finally{busy.current=false}}
- async function stop(){setError('');try{await workdayLocation.stop();setSharing(false);await workdayLocation.revoke();setConsent(false)}catch(e){setError(e instanceof Error?e.message:'Could not update location consent.')}}
+ async function stop(){setError('');try{await workdayLocation.stop(true);setSharing(false);await workdayLocation.revoke();setConsent(false)}catch(e){setError(e instanceof Error?e.message:'Could not update location consent.')}}
  return{supported,sharing,consent,error,enable,stop};
 }

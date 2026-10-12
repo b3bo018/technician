@@ -35,6 +35,7 @@ public class SecureTrackLocationPlugin extends Plugin {
         }catch(Exception error){LocationSession.clear(getContext());call.reject("Open X OPS and try starting location sharing again.");}
     }
     @PluginMethod public void stop(PluginCall call){
+        if(call.getBoolean("pause",false))getContext().getSharedPreferences("location-status",0).edit().putBoolean("paused",true).apply();
         try{JSONObject session=LocationSession.load(getContext());getContext().stopService(new Intent(getContext(),WorkdayLocationService.class));LocationSession.clear(getContext());
             if(session!=null)new Thread(()->WorkdayLocationService.stopOnServer(session)).start();call.resolve();
         }catch(Exception error){call.reject("Could not stop location sharing.");}
