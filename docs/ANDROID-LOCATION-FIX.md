@@ -1,0 +1,15 @@
+# Android AWS workday location update
+
+The existing public Play listing for X OPS is confirmed at `https://play.google.com/store/apps/details?id=com.securetrack.fieldoperations`. Build `android/app`, which has that exact package. Do not build `native-android/app`: its package is `com.securetrack.technician` and its wrapper points to the old Firebase website.
+
+The deployed AWS map uses `/v1/operations/map` and `/v1/locations/consent`, `/start`, `/update`, `/stop`. Its frontend expects a native Capacitor plugin named `SecureTrackLocation`. The old bundled Android frontend has only a sign-in location log and no continuous workday writer to that map API.
+
+This update adds the missing bridge and a native foreground location service to the matching project. It uses the existing consent API and only starts during an active technician work session with granted consent. Existing server consent is respected; an explicit Allow workday sharing control is offered where consent is absent. End workday, stop-sharing and sign-out stop native location delivery. Tokens are encrypted using Android Keystore, refresh through AWS when needed, and never follow redirects to another origin. No new backend location endpoint is required.
+
+Fresh native GPS/network fixes are sent to AWS using `sessionId`, `trackingSessionId`, `latitude`, `longitude`, `accuracyM`, and the original GPS `sampledAt`. Fixes older than 30 seconds, invalid coordinates and invalid accuracies are rejected. The service does not invent current timestamps for stale positions. Upload intervals follow the server setting within a 5–60 second range, staying below the map's stale-marker window under a working connection. Approximate Android permission is honored; precise permission improves accuracy. No background-location permission is requested: the user-visible location foreground service starts while X OPS is open.
+
+Android restrictions, loss of GPS or connectivity and force-stop can still interrupt tracking. A persistent notification shows sharing status and a Stop sharing action. The server remains responsible for verifying work-session ownership, current consent and duty state on each update. Do not claim the production live map is fixed until a consented technician's phone is tested against it.
+
+Local verification: frontend TypeScript and no-Firebase-runtime checks; eight native freshness/coordinate/accuracy safety checks; native Java compilation. Cloud CI builds the new frontend without upload-key credentials. Signing uses the existing local Play upload key, outside source control. The resulting bundle is version 1.5.2/code 23 and is not uploaded to Play by this task.
+
+Before team upload: test actual GPS while clocked in, map freshness for more than two minutes, screen-lock delivery, permission denial/revocation, consent refusal, clock-out, sign-out, account switching and reconnection. Review Play's foreground-location service declaration and the privacy policy. Notification work remains isolated in PR #5 and is not silently merged into this location release.

@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(UnifiedPushPlugin.class);
+        registerPlugin(SecureTrackLocationPlugin.class);
         super.onCreate(savedInstanceState);
         int detectedVersion = 0;
         try {
