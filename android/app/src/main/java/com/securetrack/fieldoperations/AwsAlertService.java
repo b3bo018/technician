@@ -75,7 +75,7 @@ public class AwsAlertService extends Service {
         running = true; executor.execute(this::poll); return START_NOT_STICKY;
     }
     private void poll() {
-        if (!running) return;
+        if (!isActive()) return;
         int delay = 15;
         try {
             JSONObject session = AlertSession.load(this);
@@ -91,7 +91,7 @@ public class AwsAlertService extends Service {
                     .setContentIntent(openApp(id.hashCode())).setAutoCancel(true).setOnlyAlertOnce(true).build();
                 synchronized (AlertSession.class) {
                     JSONObject current = AlertSession.load(this);
-                    if (!running || current == null || !current.optString("uid").equals(session.getString("uid"))) return;
+                    if (!isActive() || current == null || !current.optString("uid").equals(session.getString("uid"))) return;
                     getSystemService(NotificationManager.class).notify("aws:" + session.getString("uid") + ":" + id, 1, notification);
                 }
                 received.put(id);
@@ -100,7 +100,7 @@ public class AwsAlertService extends Service {
             // Do not restore credentials if sign-out/disable happened while the request was in flight.
             synchronized (AlertSession.class) {
                 JSONObject current = AlertSession.load(this);
-                if (!running || current == null || !current.optString("uid").equals(session.getString("uid"))) return;
+                if (!isActive() || current == null || !current.optString("uid").equals(session.getString("uid"))) return;
                 AlertSession.save(this, session);
             }
             failures = 0; delay = items.length() == 100 ? 1 : 15;
@@ -111,8 +111,10 @@ public class AwsAlertService extends Service {
         } catch (Exception error) { delay = backoff(); }
         if (running && !executor.isShutdown()) executor.schedule(this::poll, delay, TimeUnit.SECONDS);
     }
+    private boolean isActive() { return running && executor != null && !executor.isShutdown(); }
     private int backoff() { updateConnection("Reconnecting to AWS · open X OPS if this continues"); return Math.min(120, 5 * (1 << Math.min(++failures, 5))); }
     @Override public void onTimeout(int startId, int foregroundServiceType) { stopSelf(); }
     @Override public void onDestroy() { running = false; if (executor != null) executor.shutdownNow(); stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy(); }
     @Override public IBinder onBind(Intent intent) { return null; }
 }
+

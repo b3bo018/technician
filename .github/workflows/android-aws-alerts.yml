@@ -31,7 +31,7 @@ jobs:
         working-directory: server
       - run: node node_modules/typescript/bin/tsc -p server/tsconfig.json
       - run: node node_modules/typescript/bin/tsc -p server/tsconfig.tests.json
-      - run: node --test --test-isolation=none server/.test-build/tests/mobileAlerts.test.js
+      - run: node --test server/.test-build/tests/mobileAlerts.test.js
       - run: pnpm exec cap sync android
       - run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
@@ -45,4 +45,5 @@ jobs:
             android/app/build/outputs/apk/debug/app-debug.apk
             dist/
           retention-days: 7
+
 
