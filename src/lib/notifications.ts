@@ -1,10 +1,11 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { pushApi } from './cloud/auth';
+import { pushApi, androidAlertSession } from './cloud/auth';
 
 export type NotificationState='granted'|'denied'|'default'|'unsupported';
 const native=()=>Capacitor.isNativePlatform();
-const UnifiedPush=registerPlugin<{register(options:{publicKey:string;apiBase:string;token:string}):Promise<void>;unregister():Promise<void>}>('UnifiedPush');
+const AwsAlerts=registerPlugin<{register(options:{uid:string;token:string;refreshToken:string}):Promise<void>;unregister():Promise<void>;status():Promise<{running:boolean;requested:boolean}>}>('AwsAlerts');
+export async function androidAlertStatus(){return Capacitor.getPlatform()==='android'?AwsAlerts.status():{running:false,requested:false}}
 const notificationId=(tag:string)=>{let hash=0;for(const char of tag)hash=((hash<<5)-hash)+char.charCodeAt(0)|0;return Math.abs(hash)||1}
 
 export function notificationsMuted(){return localStorage.getItem('securetrack:notifications-muted')==='1'}
@@ -21,14 +22,13 @@ export async function enableWebPush(uid:string){
 }
 export async function enableAndroidPush(uid:string){
  if(!native())return false;
- const [{publicKey},token]=await Promise.all([pushApi.getConfig(),pushApi.getSessionToken()]);
- if(!token)throw new Error('Sign in again before enabling Android push.');
- const apiBase=pushApi.apiBase||'https://connect.securetrackgo.com';
- await UnifiedPush.register({publicKey,apiBase,token});
+ if(Capacitor.getPlatform()!=='android')throw new Error('Background alerts are not configured for this platform.');
+ const session=await androidAlertSession();if(session.uid!==uid)throw new Error('Sign in again to enable alerts.');
+ await AwsAlerts.register(session);
  localStorage.setItem(`securetrack:push:${uid}`,'1');localStorage.setItem('securetrack:push:enabled','1');return true;
 }
 export async function disableWebPush(uid:string){
- if(native()){await UnifiedPush.unregister();localStorage.removeItem(`securetrack:push:${uid}`);localStorage.removeItem('securetrack:push:enabled');return}
+ if(Capacitor.getPlatform()==='android'){await AwsAlerts.unregister();localStorage.removeItem(`securetrack:push:${uid}`);localStorage.removeItem('securetrack:push:enabled');return}
  if(!('serviceWorker'in navigator))return;
  const registration=await navigator.serviceWorker.getRegistration('/');const subscription=await registration?.pushManager.getSubscription();
  if(subscription){await pushApi.remove(subscription.endpoint);await subscription.unsubscribe()}

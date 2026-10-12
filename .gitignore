@@ -29,3 +29,7 @@ tmp/
 *.pfx
 *signing.properties
 *service-account*.json
+
+server/.test-build/
+server/dist/
+android/.android-user/
