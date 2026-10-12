@@ -4,6 +4,7 @@ import { CarFront, FileCheck2, Search, Wrench } from 'lucide-react';
 import { db } from '../lib/aws';
 import { displayTime, TIME_ZONE } from '../lib/domain';
 import { Installation, Shift, inspectionLabel, jobLabel, jobReference } from '../types';
+import { installationStatusLabel } from '../lib/installationStatus';
 
 const plateKey=(value?:string)=>String(value||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const text=(value:any)=>String(value??'').trim();
@@ -56,7 +57,7 @@ export function VehicleSearch({shifts,installations,initialSearch}:{shifts:Shift
   for(const certificate of certificates){
    const values=[certificate.vehicle_number,certificate.chassis_number,certificate.tracker_id,certificate.device_imei,certificate.sim_number,certificate.company_name,certificate.contact_person];
    if(!plateKey(certificate.vehicle_number).includes(searchKey)&&!values.some(value=>normalized(value).includes(searchText)))continue;
-   rows.push({id:`certificate-${certificate.id}`,vehicle:text(certificate.vehicle_number),kind:'certificate',title:`Certificate · ${text(certificate.service_type)||'GPS service'}`,company:text(certificate.company_name)||'—',technician:text(certificate.issued_by)||'—',occurredAt:text(certificate.issue_date),status:`${text(certificate.installation_status)||'Not Installed'} · ${text(certificate.payment_status)||'Unpaid'}`,imei:text(certificate.tracker_id),device:text(certificate.device_type),notes:text(certificate.remarks)});
+   rows.push({id:`certificate-${certificate.id}`,vehicle:text(certificate.vehicle_number),kind:'certificate',title:`Certificate · ${text(certificate.service_type)||'GPS service'}`,company:text(certificate.company_name)||'—',technician:text(certificate.issued_by)||'—',occurredAt:text(certificate.issue_date),status:`${installationStatusLabel(certificate.installation_status)||'—'} · ${text(certificate.payment_status)||'Unpaid'}`,imei:text(certificate.tracker_id),device:text(certificate.device_type),notes:text(certificate.remarks)});
   }
   return rows.sort((a,b)=>timeValue(b.occurredAt)-timeValue(a.occurredAt));
  },[searchKey,searchText,shifts,installations,certificates]);
