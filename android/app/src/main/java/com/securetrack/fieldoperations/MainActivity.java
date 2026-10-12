@@ -3,12 +3,11 @@ package com.securetrack.fieldoperations;
 import android.os.Bundle;
 import android.content.pm.PackageManager;
 import com.getcapacitor.BridgeActivity;
-import com.securetrack.fieldoperations.UnifiedPushPlugin;
 
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        registerPlugin(UnifiedPushPlugin.class);
+        registerPlugin(AwsAlertPlugin.class);
         super.onCreate(savedInstanceState);
         int detectedVersion = 0;
         try {

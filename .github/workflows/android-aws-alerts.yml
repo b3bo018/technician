@@ -1,0 +1,49 @@
+name: Build AWS Android alerts
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/aws-in-app-alerts-20261012]
+permissions:
+  contents: read
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VITE_API_URL: https://connect.securetrackgo.com
+      VITE_SYNC_INTERVAL_MS: 5000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check:firebase
+      - run: pnpm build
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: server
+      - run: node node_modules/typescript/bin/tsc -p server/tsconfig.json
+      - run: node node_modules/typescript/bin/tsc -p server/tsconfig.tests.json
+      - run: node --test server/.test-build/tests/mobileAlerts.test.js
+      - run: pnpm exec cap sync android
+      - run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew assembleDebug --console=plain -Pkotlin.compiler.execution.strategy=in-process
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aws-alerts-debug-and-web
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            dist/
+          retention-days: 7
+
+
