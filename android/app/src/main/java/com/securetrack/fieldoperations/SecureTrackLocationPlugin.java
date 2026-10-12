@@ -36,9 +36,9 @@ public class SecureTrackLocationPlugin extends Plugin {
     }
     @PluginMethod public void stop(PluginCall call){
         if(call.getBoolean("pause",false))getContext().getSharedPreferences("location-status",0).edit().putBoolean("paused",true).apply();
-        try{JSONObject session=LocationSession.load(getContext());getContext().stopService(new Intent(getContext(),WorkdayLocationService.class));LocationSession.clear(getContext());
-            if(session!=null)new Thread(()->WorkdayLocationService.stopOnServer(session)).start();call.resolve();
-        }catch(Exception error){call.reject("Could not stop location sharing.");}
+        JSONObject previous=null;try{previous=LocationSession.load(getContext());}catch(Exception ignored){}
+        getContext().stopService(new Intent(getContext(),WorkdayLocationService.class));LocationSession.clear(getContext());
+        final JSONObject session=previous;if(session!=null)new Thread(()->WorkdayLocationService.stopOnServer(session)).start();call.resolve();
     }
     @PluginMethod public void status(PluginCall call){JSObject result=new JSObject();result.put("running",WorkdayLocationService.running);result.put("paused",getContext().getSharedPreferences("location-status",0).getBoolean("paused",false));try{JSONObject session=LocationSession.load(getContext());if(session!=null){result.put("uid",session.optString("uid"));result.put("sessionId",session.optString("sessionId"));}}catch(Exception ignored){}call.resolve(result);}
     @PluginMethod public void updateToken(PluginCall call){try{JSONObject session=LocationSession.load(getContext());if(session!=null&&!call.getString("token","").isEmpty()){session.put("token",call.getString("token"));if(!call.getString("refreshToken","").isEmpty())session.put("refreshToken",call.getString("refreshToken"));LocationSession.save(getContext(),session);}call.resolve();}catch(Exception error){call.reject("Could not refresh location session.");}}

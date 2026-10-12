@@ -28,8 +28,8 @@ public class WorkdayLocationService extends Service implements LocationListener 
     static class ApiError extends IOException{final int code;ApiError(int value){code=value;}}
     static JSONObject request(String path,String token,JSONObject data)throws Exception{
         HttpURLConnection connection=(HttpURLConnection)new URL(API+path).openConnection();connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(10000);connection.setReadTimeout(15000);
-        try{connection.setRequestMethod("POST");connection.setRequestProperty("Content-Type","application/json");if(!token.isEmpty())connection.setRequestProperty("Authorization","Bearer "+token);connection.setDoOutput(true);
-            try(OutputStream out=connection.getOutputStream()){out.write(data.toString().getBytes(StandardCharsets.UTF_8));}
+        try{connection.setRequestMethod(data==null?"GET":"POST");connection.setRequestProperty("Content-Type","application/json");if(!token.isEmpty())connection.setRequestProperty("Authorization","Bearer "+token);
+            if(data!=null){connection.setDoOutput(true);try(OutputStream out=connection.getOutputStream()){out.write(data.toString().getBytes(StandardCharsets.UTF_8));}}
             int code=connection.getResponseCode();if(code<200||code>=300)throw new ApiError(code);if(code==204)return new JSONObject();
             try(InputStream in=connection.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int count;while((count=in.read(buffer))!=-1){out.write(buffer,0,count);if(out.size()>131072)throw new IOException("Response too large");}String text=out.toString("UTF-8");return text.isEmpty()?new JSONObject():new JSONObject(text);}
         }finally{connection.disconnect();}
@@ -56,8 +56,8 @@ public class WorkdayLocationService extends Service implements LocationListener 
         try{
             if(Build.VERSION.SDK_INT>=29)startForeground(ID,notification("Getting a fresh location…"),ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);else startForeground(ID,notification("Getting a fresh location…"));
             active=true;running=true;
-            if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED&&locations.isProviderEnabled(LocationManager.GPS_PROVIDER))locations.requestLocationUpdates(LocationManager.GPS_PROVIDER,15000,0,this,Looper.getMainLooper());
-            if(locations.isProviderEnabled(LocationManager.NETWORK_PROVIDER))locations.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,15000,0,this,Looper.getMainLooper());
+            if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED&&locations.getAllProviders().contains(LocationManager.GPS_PROVIDER))locations.requestLocationUpdates(LocationManager.GPS_PROVIDER,15000,0,this,Looper.getMainLooper());
+            if(locations.getAllProviders().contains(LocationManager.NETWORK_PROVIDER))locations.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,15000,0,this,Looper.getMainLooper());
             worker.scheduleWithFixedDelay(()->{if(!active)return;if(!hasLocation()){stopSelf();return;}Location fix=newest;if(fix!=null)submit(fix);else notice("Waiting for GPS · check Android Location Services");},5,15,TimeUnit.SECONDS);
         }catch(Exception error){stopSelf();}return START_NOT_STICKY;
     }
@@ -73,6 +73,12 @@ public class WorkdayLocationService extends Service implements LocationListener 
             long age=(SystemClock.elapsedRealtimeNanos()-fix.getElapsedRealtimeNanos())/1000000;
             if(!FreshLocation.valid(fix.getLatitude(),fix.getLongitude(),fix.getAccuracy(),age)){notice("Waiting for a fresh GPS update");return;}
             if(SystemClock.elapsedRealtime()-uploadedAt<session.optInt("interval",15)*1000L)return;
+            JSONObject consent=authorized(session,"/v1/locations/consent",null);
+            JSONObject duty=authorized(session,"/documents/work_sessions/"+android.net.Uri.encode(session.getString("sessionId")),null);
+            if(!consent.optBoolean("granted")||!duty.optBoolean("exists")||!"active".equals(duty.getJSONObject("data").optString("status"))){stopSelf();return;}
+            if(!active||!hasLocation())return;
+            age=(SystemClock.elapsedRealtimeNanos()-fix.getElapsedRealtimeNanos())/1000000;
+            if(!FreshLocation.valid(fix.getLatitude(),fix.getLongitude(),fix.getAccuracy(),age))return;
             JSONObject body=new JSONObject().put("sessionId",session.getString("sessionId")).put("trackingSessionId",session.getString("trackingSessionId"))
                 .put("latitude",fix.getLatitude()).put("longitude",fix.getLongitude()).put("accuracyM",fix.getAccuracy()).put("sampledAt",sampleTime(fix.getTime()));
             authorized(session,"/v1/locations/update",body);
@@ -85,7 +91,7 @@ public class WorkdayLocationService extends Service implements LocationListener 
     @Override public void onProviderDisabled(String provider){notice("Check Android Location Services");}
     @Override public void onProviderEnabled(String provider){}
     @Override public void onStatusChanged(String provider,int status,Bundle extras){}
-    @Override public void onDestroy(){active=false;running=false;if(locations!=null)locations.removeUpdates(this);if(worker!=null)worker.shutdownNow();stopForeground(STOP_FOREGROUND_REMOVE);super.onDestroy();}
+    @Override public void onDestroy(){active=false;running=false;if(locations!=null)try{locations.removeUpdates(this);}catch(SecurityException ignored){}if(worker!=null)worker.shutdownNow();stopForeground(STOP_FOREGROUND_REMOVE);super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
 }
 
