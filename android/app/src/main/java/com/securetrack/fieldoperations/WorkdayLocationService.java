@@ -75,7 +75,10 @@ public class WorkdayLocationService extends Service implements LocationListener 
             if(SystemClock.elapsedRealtime()-uploadedAt<session.optInt("interval",15)*1000L)return;
             JSONObject consent=authorized(session,"/v1/locations/consent",null);
             JSONObject duty=authorized(session,"/documents/work_sessions/"+android.net.Uri.encode(session.getString("sessionId")),null);
-            if(!consent.optBoolean("granted")||!duty.optBoolean("exists")||!"active".equals(duty.getJSONObject("data").optString("status"))){stopSelf();return;}
+            JSONObject profile=authorized(session,"/documents/users/"+android.net.Uri.encode(session.getString("uid")),null);
+            if(!consent.optBoolean("granted")||!duty.optBoolean("exists")||!"active".equals(duty.getJSONObject("data").optString("status"))
+                ||!profile.optBoolean("exists")||!"technician".equals(profile.getJSONObject("data").optString("role"))
+                ||"deactivated".equals(profile.getJSONObject("data").optString("status"))){stopSelf();return;}
             if(!active||!hasLocation())return;
             age=(SystemClock.elapsedRealtimeNanos()-fix.getElapsedRealtimeNanos())/1000000;
             if(!FreshLocation.valid(fix.getLatitude(),fix.getLongitude(),fix.getAccuracy(),age))return;
@@ -94,4 +97,5 @@ public class WorkdayLocationService extends Service implements LocationListener 
     @Override public void onDestroy(){active=false;running=false;if(locations!=null)try{locations.removeUpdates(this);}catch(SecurityException ignored){}if(worker!=null)worker.shutdownNow();stopForeground(STOP_FOREGROUND_REMOVE);super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
 }
+
 
