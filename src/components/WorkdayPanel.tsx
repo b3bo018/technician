@@ -5,21 +5,26 @@ import { clockInWorkday, clockOutWorkday, correctWorkdayBreak, endWorkBreak, res
 import { captureLocation } from '../lib/location';
 import { dayKey, displayTime, displayTimeOnly, TIME_ZONE } from '../lib/domain';
 import { createAttendanceWorkbook, downloadWorkbook } from '../lib/excel';
+import { useWorkdayLocation } from '../hooks/useWorkdayLocation';
+import { workdayLocation } from '../lib/workdayLocation';
 
 const timeOnly=(value:string)=>displayTimeOnly(value);
 export function WorkdayPanel({profile,sessions,breaks,now,onError}:{profile:Technician;sessions:WorkSession[];breaks:WorkBreak[];now:number;onError:(message:string)=>void}){
  const [busy,setBusy]=useState(false);const date=dayKey(new Date(now));const session=sessions.find(item=>item.date===date);const ownBreaks=breaks.filter(item=>item.session_id===session?.id);const activeBreak=ownBreaks.find(item=>item.status==='active');
+ const liveLocation=useWorkdayLocation(profile,session);
  const localHour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:TIME_ZONE,hour:'2-digit',hourCycle:'h23'}).format(new Date(now)));const late=!session&&localHour>=9;
  async function act(action:'in'|'out'|'break'|'resume'|'reopen'){
   setBusy(true);onError('');try{
    if(action==='in')await clockInWorkday(profile,date,await captureLocation());
    if(action==='out'&&session)await clockOutWorkday(session,await captureLocation());
+   if(action==='out'&&session)await workdayLocation.stop();
    if(action==='break'&&session)await startWorkBreak(session);
    if(action==='resume'&&activeBreak)await endWorkBreak(activeBreak);
    if(action==='reopen'&&session)await resumeWorkday(session);
   }catch(e:any){onError(e.message)}finally{setBusy(false)}
  }
  return <section className="panel workday-panel"><div className="section-title"><div className="icon-box"><MapPin/></div><div><h2>Today’s attendance</h2><p>Attendance uses the SecureTrack server clock.</p></div></div>
+ {liveLocation.supported&&session?.status==='active'&&<div className="notice"><div><strong>{liveLocation.sharing?'Workday location sharing is on':'Workday location sharing is paused'}</strong><p>Your location is shared with authorized office staff only during an active workday, including breaks. Android shows a persistent location notification. You can stop sharing at any time.</p>{liveLocation.error&&<p role="alert">{liveLocation.error}</p>}</div><button className="secondary" onClick={()=>void(liveLocation.sharing?liveLocation.stop():liveLocation.enable())}>{liveLocation.sharing?'Stop sharing':liveLocation.consent?'Resume sharing':'Allow workday sharing'}</button></div>}
  {!session?<div className={'clock-gate '+(late?'late':'')}><div><strong>{late?'Clock-in is late':'Start your workday'}</strong><p>Your current location and server time will be recorded. Today’s jobs open immediately after clock-in.</p></div><button className="primary" disabled={busy} onClick={()=>act('in')}><LogIn/>{busy?'Getting location…':'Start workday'}</button></div>:
  <div className="workday-console"><div className="workday-status"><div><span>{session.status==='clocked_out'?'WORKDAY ENDED':'WORKDAY STARTED'}</span><strong>{timeOnly(session.clock_in_at)}</strong><small>{session.status==='clocked_out'&&session.clock_out_at?`Ended at ${timeOnly(session.clock_out_at)}`:activeBreak?'You are on a break':'You are available for jobs'}</small></div>{session.status==='clocked_out'&&<button className="secondary resume-workday" disabled={busy} onClick={()=>act('reopen')}><LogIn/>{busy?'Resuming…':'Resume workday'}</button>}</div>{session.status==='clocked_out'&&<p className="workday-recovery-note">Ended by mistake? Resume your workday, then use End workday when you are truly finished.</p>}{session.status==='active'&&<div className="workday-controls"><div className="workday-control break-control"><div><strong>{activeBreak?'Break in progress':'Taking a break?'}</strong><span>{activeBreak?'Tap when you are back and ready for jobs.':'Use this only when you are temporarily away from work.'}</span></div>{activeBreak?<button className="primary" disabled={busy} onClick={()=>act('resume')}><Coffee/>Return to work</button>:<button className="secondary" disabled={busy} onClick={()=>act('break')}><Coffee/>Start break</button>}</div><div className="workday-control end-day-control"><div><strong>Finished for today?</strong><span>End your workday only after all assigned work is complete.</span></div><button className="end-workday-button" disabled={busy||!!activeBreak} onClick={()=>act('out')}><LogOut/>End workday</button></div></div>}</div>}
  {ownBreaks.length>0&&<div className="break-history">{ownBreaks.map(item=><span key={item.id}>Break {timeOnly(item.started_at)}{item.ended_at?`–${timeOnly(item.ended_at)}`:'–active'}</span>)}</div>}

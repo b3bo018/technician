@@ -25,9 +25,10 @@ async function refresh(){
 }
 setTokenProvider(refresh);
 export const auth={get currentUser(){return session?.user||null}};
+export async function nativeLocationSession(){await refresh();if(!session?.refreshToken)throw new Error('Sign in again to share workday location.');return{uid:session.user.uid,token:session.accessToken,refreshToken:session.refreshToken}}
 export function onAuthStateChanged(_auth:any,listener:AuthListener){listeners.add(listener);queueMicrotask(()=>listener(session?.user||null));return()=>{listeners.delete(listener)}}
 export async function signInWithEmailAndPassword(_auth:any,email:string,password:string){const data=await call('/v1/auth/login',{email,password});save({user:data.user,accessToken:data.accessToken,refreshToken:data.refreshToken,expiresAt:Date.now()+Number(data.expiresIn||3600)*1000});return{user:data.user}}
-export async function signOut(_auth:any){try{if(session){try{const {disableWebPush}=await import('../notifications');await disableWebPush(session.user.uid)}catch{}await call('/v1/auth/logout',{})}}finally{save(null)}}
+export async function signOut(_auth:any){try{const {workdayLocation}=await import('../workdayLocation');await workdayLocation.stop();if(session){try{const {disableWebPush}=await import('../notifications');await disableWebPush(session.user.uid)}catch{}await call('/v1/auth/logout',{})}}finally{save(null)}}
 export const pushApi={getConfig:pushConfig,register:savePushSubscription,remove:deletePushSubscription,getSessionToken:refresh,apiBase:API};
 export async function sendPasswordResetEmail(_auth:any,email:string){await call('/v1/auth/forgot-password',{email})}
 export async function confirmPasswordReset(_auth:any,email:string,code:string,password:string){await call('/v1/auth/confirm-forgot-password',{email,code,password})}
@@ -37,3 +38,4 @@ export async function deleteManagedUser(email:string){return call('/admin/users/
 export const EmailAuthProvider={credential:(email:string,password:string)=>({email,password})};
 export async function reauthenticateWithCredential(user:User,credential:{email:string;password:string}){const data=await call('/v1/auth/reauthenticate',credential);if(data?.uid&&data.uid!==user.uid)throw Object.assign(new Error('The current password is incorrect.'),{code:'auth/invalid-credential'});localStorage.setItem('securetrack:reauth-password',credential.password);return{user}}
 export async function updatePassword(_user:User,password:string){const current=localStorage.getItem('securetrack:reauth-password')||'';try{await call('/v1/auth/password',{email:_user.email,currentPassword:current,password},'PUT')}finally{localStorage.removeItem('securetrack:reauth-password')}}
+

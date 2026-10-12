@@ -17,7 +17,7 @@ export function isAndroidAppContext() {
 }
 
 export function isNativeAndroidApp() {
-  return /SecureTrackNative\//i.test(navigator.userAgent || '');
+  return Capacitor.getPlatform()==='android'||/SecureTrackNative\//i.test(navigator.userAgent || '');
 }
 
 function messageForError(error: GeolocationPositionError) {
@@ -51,6 +51,9 @@ function requestPosition(options: PositionOptions) {
 }
 
 export async function captureLocation(): Promise<LocationFix> {
+  if(Capacitor.getPlatform()==='android'){
+    try{let permission=await Geolocation.checkPermissions();if(permission.location!=='granted'&&permission.coarseLocation!=='granted')permission=await Geolocation.requestPermissions();if(permission.location!=='granted'&&permission.coarseLocation!=='granted')throw new LocationError('Allow Android location permission, then try again.',1);const fix=await Geolocation.getCurrentPosition({enableHighAccuracy:true,maximumAge:0,timeout:20000});return{latitude:fix.coords.latitude,longitude:fix.coords.longitude,accuracy_m:fix.coords.accuracy}}catch(error){if(error instanceof LocationError)throw error;throw new LocationError('Android could not get a fresh location. Check Location Services and try again.',2)}
+  }
   if (!window.isSecureContext || !navigator.geolocation) {
     throw new LocationError('Location is unavailable in this browser. Open the live SecureTrack site in Safari or Chrome and try again.', 2);
   }
@@ -61,7 +64,7 @@ export async function captureLocation(): Promise<LocationFix> {
     return await requestPosition({
       enableHighAccuracy: false,
       timeout: 5000,
-      maximumAge: 180000,
+      maximumAge: 15000,
     });
   } catch (error) {
     if (error instanceof LocationError && error.code === 1) throw error;
@@ -72,3 +75,5 @@ export async function captureLocation(): Promise<LocationFix> {
     });
   }
 }
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';

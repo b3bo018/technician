@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@drawable/securetrack_icon"
         android:label="@string/app_name"
         android:roundIcon="@drawable/securetrack_icon"
@@ -24,6 +24,7 @@
 
         </activity>
 
+        <service android:name=".WorkdayLocationService" android:exported="false" android:foregroundServiceType="location" />
         <service android:name=".SecureTrackPushService" android:exported="false">
             <intent-filter>
                 <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
@@ -48,4 +49,6 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 </manifest>
